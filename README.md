@@ -1,13 +1,13 @@
 # zenoh-ros2-sdk
 
-**A Python SDK for ROS2 communication using Zenoh middleware - No ROS2 installation required**
+**Python SDK for ROS 2 communication via Zenoh - Use ROS 2 without ROS 2 environment
 
-Enable ROS2 topic publishing and subscribing in pure Python applications. Publishers and subscribers automatically appear in `ros2 topic list` and work seamlessly with existing ROS2 nodes using rmw_zenoh.
+Enable ROS 2 topic publishing and subscribing in pure Python applications. Publishers and subscribers automatically appear in `ros2 topic list` and work seamlessly with existing ROS 2 nodes using rmw_zenoh.
 
 ## Features
 
-- ✅ **No ROS2 installation required** - Works with just Python and Zenoh
-- ✅ **Appears in `ros2 topic list`** - Uses liveliness tokens for ROS2 discovery
+- ✅ **No ROS 2 installation required** - Works with just Python and Zenoh
+- ✅ **Appears in `ros2 topic list`** - Uses liveliness tokens for ROS 2 discovery
 - ✅ **Automatic resource management** - GIDs, node IDs, entity IDs handled automatically
 - ✅ **Session pooling** - Multiple publishers/subscribers share the same Zenoh session
 - ✅ **Type registration** - Automatic message type registration
