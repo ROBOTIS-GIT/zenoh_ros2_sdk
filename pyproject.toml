@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zenoh-ros2-sdk"
+version = "0.1.0"
+description = "Python SDK for ROS2 communication via Zenoh - No ROS2 installation required"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Woojin Wie", email = "wwj@robotis.com"},
+]
+keywords = ["ros2", "zenoh", "robotics", "sdk", "middleware"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Robotics",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "eclipse-zenoh>=0.10.0",
+    "rosbags>=0.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/robotis-git/zenoh_ros2_sdk"
+Repository = "https://github.com/robotis-git/zenoh_ros2_sdk"
+Issues = "https://github.com/robotis-git/zenoh_ros2_sdk/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "examples*"]
