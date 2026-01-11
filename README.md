@@ -226,7 +226,3 @@ python3 examples/04_subscribe_twist.py
 - [ ] Better error handling and retry logic
 - [ ] Connection pooling and reconnection
 - [ ] QoS configuration options
-
-## Acknowledgments
-
-The repository download and caching logic in `zenoh_ros2_sdk._cache` is adapted from [robot_descriptions.py](https://github.com/robot-descriptions/robot_descriptions.py) (Apache-2.0 licensed). Original work: Copyright 2022 Stéphane Caron, Copyright 2023 Inria.
