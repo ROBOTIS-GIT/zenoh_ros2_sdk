@@ -12,6 +12,9 @@ license = {text = "Apache-2.0"}
 authors = [
     {name = "Woojin Wie", email = "wwj@robotis.com"},
 ]
+maintainers = [
+    {name = "Woojin Wie", email = "wwj@robotis.com"},
+]
 keywords = ["ros2", "zenoh", "robotics", "sdk", "middleware"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -29,6 +32,8 @@ classifiers = [
 dependencies = [
     "eclipse-zenoh>=0.10.0",
     "rosbags>=0.11.0",
+    "GitPython>=3.1.18",
+    "tqdm>=4.64.0",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +48,7 @@ dev = [
 Homepage = "https://github.com/robotis-git/zenoh_ros2_sdk"
 Repository = "https://github.com/robotis-git/zenoh_ros2_sdk"
 Issues = "https://github.com/robotis-git/zenoh_ros2_sdk/issues"
+Documentation = "https://github.com/robotis-git/zenoh_ros2_sdk#readme"
 
 [tool.setuptools.packages.find]
 exclude = ["tests*", "examples*"]

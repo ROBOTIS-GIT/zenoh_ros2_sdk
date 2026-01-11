@@ -32,6 +32,8 @@ setup(
     install_requires=[
         "eclipse-zenoh>=0.10.0",
         "rosbags>=0.11.0",
+        "GitPython>=3.1.18",
+        "tqdm>=4.64.0",
     ],
     extras_require={
         "dev": [

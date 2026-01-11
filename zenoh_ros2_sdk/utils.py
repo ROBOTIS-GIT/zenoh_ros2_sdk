@@ -1,6 +1,78 @@
 """
 Utility functions for type conversion and message handling
 """
+import hashlib
+import json
+import re
+from copy import deepcopy
+from typing import Dict, List, Optional, Set
+
+# RIHS constants
+RIHS01_PREFIX = 'RIHS01_'
+RIHS01_HASH_VALUE_SIZE = 32
+
+# Field type mappings (from type_description_interfaces/msgs/FieldType.msg)
+FIELD_TYPE_NAME_TO_ID = {
+    'FIELD_TYPE_NOT_SET': 0,
+    'FIELD_TYPE_NESTED_TYPE': 1,
+    'FIELD_TYPE_INT8': 2,
+    'FIELD_TYPE_UINT8': 3,
+    'FIELD_TYPE_INT16': 4,
+    'FIELD_TYPE_UINT16': 5,
+    'FIELD_TYPE_INT32': 6,
+    'FIELD_TYPE_UINT32': 7,
+    'FIELD_TYPE_INT64': 8,
+    'FIELD_TYPE_UINT64': 9,
+    'FIELD_TYPE_FLOAT': 10,
+    'FIELD_TYPE_DOUBLE': 11,
+    'FIELD_TYPE_LONG_DOUBLE': 12,
+    'FIELD_TYPE_CHAR': 13,
+    'FIELD_TYPE_WCHAR': 14,
+    'FIELD_TYPE_BOOLEAN': 15,
+    'FIELD_TYPE_BYTE': 16,
+    'FIELD_TYPE_STRING': 17,
+    'FIELD_TYPE_WSTRING': 18,
+    'FIELD_TYPE_FIXED_STRING': 19,
+    'FIELD_TYPE_FIXED_WSTRING': 20,
+    'FIELD_TYPE_BOUNDED_STRING': 21,
+    'FIELD_TYPE_BOUNDED_WSTRING': 22,
+    # Array types
+    'FIELD_TYPE_NESTED_TYPE_ARRAY': 49,
+    'FIELD_TYPE_INT8_ARRAY': 50,
+    'FIELD_TYPE_UINT8_ARRAY': 51,
+    'FIELD_TYPE_INT16_ARRAY': 52,
+    'FIELD_TYPE_UINT16_ARRAY': 53,
+    'FIELD_TYPE_INT32_ARRAY': 54,
+    'FIELD_TYPE_UINT32_ARRAY': 55,
+    'FIELD_TYPE_INT64_ARRAY': 56,
+    'FIELD_TYPE_UINT64_ARRAY': 57,
+    'FIELD_TYPE_FLOAT_ARRAY': 58,
+    'FIELD_TYPE_DOUBLE_ARRAY': 59,
+    'FIELD_TYPE_STRING_ARRAY': 65,
+}
+
+# Mapping from ROS2 primitive types to field type names
+PRIMITIVE_TO_FIELD_TYPE = {
+    'bool': 'FIELD_TYPE_BOOLEAN',
+    'int8': 'FIELD_TYPE_INT8',
+    'uint8': 'FIELD_TYPE_UINT8',
+    'int16': 'FIELD_TYPE_INT16',
+    'uint16': 'FIELD_TYPE_UINT16',
+    'int32': 'FIELD_TYPE_INT32',
+    'uint32': 'FIELD_TYPE_UINT32',
+    'int64': 'FIELD_TYPE_INT64',
+    'uint64': 'FIELD_TYPE_UINT64',
+    'float32': 'FIELD_TYPE_FLOAT',
+    'float': 'FIELD_TYPE_FLOAT',
+    'float64': 'FIELD_TYPE_DOUBLE',
+    'double': 'FIELD_TYPE_DOUBLE',
+    'string': 'FIELD_TYPE_STRING',
+    'wstring': 'FIELD_TYPE_WSTRING',
+    'char': 'FIELD_TYPE_CHAR',
+    'wchar': 'FIELD_TYPE_WCHAR',
+    'byte': 'FIELD_TYPE_BYTE',
+    'octet': 'FIELD_TYPE_BYTE',
+}
 
 
 def ros2_to_dds_type(ros2_type: str) -> str:
@@ -15,14 +87,210 @@ def ros2_to_dds_type(ros2_type: str) -> str:
     return ros2_type.replace("/", "::")
 
 
-def get_type_hash(msg_type: str) -> str:
-    """Get type hash for common message types"""
-    # Common type hashes - in production, this should be computed or looked up
-    common_hashes = {
-        "std_msgs/msg/String": "RIHS01_df668c740482bbd48fb39d76a70dfd4bd59db1288021743503259e948f6b1a18",
-        "std_msgs/msg/Int32": "RIHS01_0000000000000000000000000000000000000000000000000000000000000000",  # Placeholder
+def _parse_msg_definition(msg_def: str) -> List[Dict]:
+    """Parse a .msg file definition into field structures."""
+    fields = []
+    for line in msg_def.split('\n'):
+        # Remove comments
+        if '#' in line:
+            line = line[:line.index('#')]
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Parse field: type name [array_size]
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        
+        field_type = parts[0]
+        field_name = parts[1]
+        
+        # Check for array
+        is_array = False
+        array_size = 0
+        if len(parts) > 2:
+            array_part = ' '.join(parts[2:])
+            if '[' in array_part and ']' in array_part:
+                is_array = True
+                match = re.search(r'\[(\d+)\]', array_part)
+                if match:
+                    array_size = int(match.group(1))
+        
+        fields.append({
+            'name': field_name,
+            'type': field_type,
+            'is_array': is_array,
+            'array_size': array_size,
+        })
+    
+    return fields
+
+
+def _field_type_to_type_id(field_type: str, is_array: bool = False) -> int:
+    """Convert ROS2 field type to field type ID"""
+    if field_type in PRIMITIVE_TO_FIELD_TYPE:
+        type_name = PRIMITIVE_TO_FIELD_TYPE[field_type]
+    else:
+        type_name = 'FIELD_TYPE_NESTED_TYPE'
+    
+    if is_array:
+        type_name += '_ARRAY'
+    
+    return FIELD_TYPE_NAME_TO_ID.get(type_name, 0)
+
+
+def _serialize_field(field: Dict, msg_type: str) -> Dict:
+    """Serialize a field to type description format"""
+    field_type = field['type']
+    is_nested = field_type not in PRIMITIVE_TO_FIELD_TYPE
+    
+    type_dict = {
+        'type_id': _field_type_to_type_id(field_type, field['is_array']),
+        'capacity': field['array_size'] if field['is_array'] else 0,
+        'string_capacity': 0,
+        'nested_type_name': field_type if is_nested else '',
     }
-    return common_hashes.get(msg_type, "RIHS01_0000000000000000000000000000000000000000000000000000000000000000")
+    
+    if is_nested and '/' not in field_type:
+        namespace = msg_type.split('/')[0]
+        type_dict['nested_type_name'] = f"{namespace}/msg/{field_type}"
+    
+    return {
+        'name': field['name'],
+        'type': type_dict,
+        'default_value': '',
+    }
+
+
+def _serialize_type_description(msg_type: str, fields: List[Dict]) -> Dict:
+    """Serialize a message type to type description format"""
+    return {
+        'type_name': msg_type,
+        'fields': [_serialize_field(f, msg_type) for f in fields],
+    }
+
+
+def _extract_full_type_description(
+    msg_type: str,
+    type_map: Dict[str, Dict],
+    visited: Optional[Set[str]] = None
+) -> Dict:
+    """Extract full type description including all referenced types."""
+    if visited is None:
+        visited = set()
+    
+    if msg_type not in type_map:
+        raise ValueError(f"Type {msg_type} not found in type map")
+    
+    output_type = type_map[msg_type]
+    output_references = set()
+    process_queue = [
+        field['type']['nested_type_name']
+        for field in output_type['fields']
+        if field['type']['nested_type_name']
+    ]
+    
+    while process_queue:
+        process_type = process_queue.pop()
+        if process_type and process_type not in output_references and process_type in type_map:
+            output_references.add(process_type)
+            if process_type in type_map:
+                process_queue.extend([
+                    field['type']['nested_type_name']
+                    for field in type_map[process_type]['fields']
+                    if field['type']['nested_type_name']
+                ])
+    
+    return {
+        'type_description': output_type,
+        'referenced_type_descriptions': [
+            type_map[type_name] for type_name in sorted(output_references)
+        ],
+    }
+
+
+def _calculate_type_hash(serialized_type_description: Dict) -> str:
+    """Calculate type hash from serialized type description (ROS2 algorithm)."""
+    hashable_dict = deepcopy(serialized_type_description)
+    for field in hashable_dict['type_description']['fields']:
+        if 'default_value' in field:
+            del field['default_value']
+    for referenced_td in hashable_dict.get('referenced_type_descriptions', []):
+        for field in referenced_td['fields']:
+            if 'default_value' in field:
+                del field['default_value']
+    
+    hashable_repr = json.dumps(
+        hashable_dict,
+        skipkeys=False,
+        ensure_ascii=True,
+        check_circular=True,
+        allow_nan=False,
+        indent=None,
+        separators=(', ', ': '),  # Critical: must match ROS2's format
+        sort_keys=False
+    )
+    
+    sha = hashlib.sha256()
+    sha.update(hashable_repr.encode('utf-8'))
+    return RIHS01_PREFIX + sha.hexdigest()
+
+
+def compute_type_hash_from_msg(
+    msg_type: str,
+    msg_definition: str,
+    dependencies: Optional[Dict[str, str]] = None
+) -> str:
+    """
+    Compute ROS2 type hash from message definition.
+    
+    Args:
+        msg_type: Full message type name (e.g., "std_msgs/msg/String")
+        msg_definition: Raw .msg file content
+        dependencies: Optional dict of {type_name: msg_definition} for nested types
+        
+    Returns:
+        Type hash string in format RIHS01_<hash>
+    """
+    fields = _parse_msg_definition(msg_definition)
+    type_map = {}
+    type_map[msg_type] = _serialize_type_description(msg_type, fields)
+    
+    if dependencies:
+        for dep_type, dep_def in dependencies.items():
+            dep_fields = _parse_msg_definition(dep_def)
+            type_map[dep_type] = _serialize_type_description(dep_type, dep_fields)
+    
+    full_type_description = _extract_full_type_description(msg_type, type_map)
+    return _calculate_type_hash(full_type_description)
+
+
+def get_type_hash(msg_type: str, msg_definition: Optional[str] = None, dependencies: Optional[Dict[str, str]] = None) -> str:
+    """
+    Get type hash for a message type.
+    
+    Computes the hash from the message definition. If msg_definition is not provided,
+    raises ValueError as the hash cannot be computed.
+    
+    Args:
+        msg_type: ROS2 message type (e.g., "std_msgs/msg/String")
+        msg_definition: Message definition text (required)
+        dependencies: Optional dict of {type_name: msg_definition} for nested types
+        
+    Returns:
+        Type hash string in format RIHS01_<hash>
+        
+    Raises:
+        ValueError: If msg_definition is not provided
+    """
+    if not msg_definition:
+        raise ValueError(
+            f"Message definition is required to compute type hash for {msg_type}. "
+            "Please provide msg_definition or use the message registry to load the type."
+        )
+    
+    return compute_type_hash_from_msg(msg_type, msg_definition, dependencies)
 
 
 def mangle_name(name: str) -> str:

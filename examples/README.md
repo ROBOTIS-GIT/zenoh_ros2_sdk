@@ -2,38 +2,40 @@
 
 This directory contains self-contained example scripts demonstrating different use cases of the zenoh-ros2-sdk.
 
+Examples are numbered in a recommended learning order, starting with simple cases and progressing to more complex message types.
+
 ## Available Examples
 
-### `simple_publisher.py`
-Publishes String messages to a ROS2 topic. Shows the basic publisher pattern.
+### `01_publish_string.py`
+Publishes String messages to a ROS2 topic. Demonstrates the basic publisher pattern with automatic message type loading.
 
 **Usage:**
 ```bash
-python3 examples/simple_publisher.py
+python3 examples/01_publish_string.py
 ```
 
-### `simple_subscriber.py`
-Subscribes to a ROS2 topic and receives String messages. Shows the basic subscriber pattern.
+### `02_subscribe_string.py`
+Subscribes to a ROS2 topic and receives String messages. Demonstrates the basic subscriber pattern with automatic message type loading.
 
 **Usage:**
 ```bash
-python3 examples/simple_subscriber.py
+python3 examples/02_subscribe_string.py
 ```
 
-### `custom_message_type.py`
-Demonstrates how to use custom message types (Int32 in this example). Shows both publishing and subscribing to custom types.
+### `03_publish_twist.py`
+Demonstrates how to publish `geometry_msgs/msg/Twist` messages, commonly used for velocity commands in robotics. Shows how to work with nested message types (Vector3).
 
 **Usage:**
 ```bash
-python3 examples/custom_message_type.py
+python3 examples/03_publish_twist.py
 ```
 
-### `multiple_publishers.py`
-Shows how multiple publishers automatically share the same Zenoh session through the singleton pattern.
+### `04_subscribe_twist.py`
+Demonstrates how to subscribe to `geometry_msgs/msg/Twist` messages and access nested message fields.
 
 **Usage:**
 ```bash
-python3 examples/multiple_publishers.py
+python3 examples/04_subscribe_twist.py
 ```
 
 ## Running Examples
@@ -43,4 +45,4 @@ Make sure you have:
 2. Set the correct `domain_id` in the example (default is 30)
 3. Set the correct `router_ip` if not using localhost
 
-Each example is self-contained and includes helper functions where needed. You can copy and modify these examples for your own use cases.
+Each example is self-contained and uses the message registry to automatically load message definitions. You can copy and modify these examples for your own use cases.

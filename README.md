@@ -10,6 +10,8 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 - ✅ **Appears in `ros2 topic list`** - Uses liveliness tokens for ROS 2 discovery
 - ✅ **Automatic resource management** - GIDs, node IDs, entity IDs handled automatically
 - ✅ **Session pooling** - Multiple publishers/subscribers share the same Zenoh session
+- ✅ **Automatic message loading** - Automatically downloads message definitions from Git repositories
+- ✅ **Type hash computation** - Computes ROS2-compatible type hashes from message definitions
 - ✅ **Type registration** - Automatic message type registration
 - ✅ **Clean API** - Simple, intuitive interface
 
@@ -18,12 +20,15 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 ### Simple Publisher
 
 ```python
-from zenoh_ros2_sdk import ROS2Publisher
+from zenoh_ros2_sdk import ROS2Publisher, load_message_type
 
+# Load message type (automatically downloads if needed)
+load_message_type("std_msgs/msg/String")
+
+# Create publisher - msg_definition is optional, auto-loads from registry
 pub = ROS2Publisher(
     topic="/chatter",
     msg_type="std_msgs/msg/String",
-    msg_definition="string data\n",
     domain_id=30
 )
 
@@ -37,15 +42,18 @@ pub.close()
 ### Simple Subscriber
 
 ```python
-from zenoh_ros2_sdk import ROS2Subscriber
+from zenoh_ros2_sdk import ROS2Subscriber, load_message_type
+
+# Load message type (automatically downloads if needed)
+load_message_type("std_msgs/msg/String")
 
 def on_message(msg):
     print(f"Received: {msg.data}")
 
+# Create subscriber - msg_definition is optional, auto-loads from registry
 sub = ROS2Subscriber(
     topic="/chatter",
     msg_type="std_msgs/msg/String",
-    msg_definition="string data\n",
     callback=on_message,
     domain_id=30
 )
@@ -86,18 +94,49 @@ sub.close()
 
 ## Examples
 
-See the `examples/` directory for self-contained example scripts:
+See the `examples/` directory for self-contained example scripts (numbered in recommended learning order):
 
-- `simple_publisher.py` - Basic publisher example
-- `simple_subscriber.py` - Basic subscriber example  
-- `custom_message_type.py` - Using custom message types
-- `multiple_publishers.py` - Multiple publishers sharing a session
+- `01_publish_string.py` - Basic publisher example with String messages
+- `02_subscribe_string.py` - Basic subscriber example with String messages
+- `03_publish_twist.py` - Publishing Twist messages (nested types)
+- `04_subscribe_twist.py` - Subscribing to Twist messages (nested types)
 
-Each example is self-contained and includes helper functions. You can copy and modify them for your use cases.
+Each example is self-contained and uses automatic message loading. You can copy and modify them for your use cases.
 
 ## Advanced Usage
 
-### Custom Message Types
+### Using Message Registry (Recommended)
+
+The SDK automatically downloads message definitions from Git repositories:
+
+```python
+from zenoh_ros2_sdk import ROS2Publisher, load_message_type, get_message_class
+
+# Automatically loads message type and dependencies
+load_message_type("geometry_msgs/msg/Twist")
+
+# Get message classes for easy object creation
+Vector3 = get_message_class("geometry_msgs/msg/Vector3")
+Twist = get_message_class("geometry_msgs/msg/Twist")
+
+# Create publisher - no need to provide msg_definition
+pub = ROS2Publisher(
+    topic="/cmd_vel",
+    msg_type="geometry_msgs/msg/Twist",
+    domain_id=30
+)
+
+# Create message objects
+linear = Vector3(x=0.5, y=0.0, z=0.0)
+angular = Vector3(x=0.0, y=0.0, z=0.2)
+pub.publish(linear=linear, angular=angular)
+
+pub.close()
+```
+
+### Manual Message Definitions
+
+You can still provide message definitions manually if needed:
 
 ```python
 from zenoh_ros2_sdk import ROS2Publisher
@@ -111,20 +150,6 @@ pub = ROS2Publisher(
 
 pub.publish(data=42)
 pub.close()
-```
-
-### Multiple Publishers
-
-```python
-pub1 = create_string_publisher("/topic1", domain_id=30)
-pub2 = create_string_publisher("/topic2", domain_id=30)
-
-# Both share the same Zenoh session automatically
-pub1.publish(data="Message 1")
-pub2.publish(data="Message 2")
-
-pub1.close()
-pub2.close()
 ```
 
 ## Configuration
@@ -142,6 +167,15 @@ pub2.close()
 - Python 3.8+
 - `eclipse-zenoh` Python package (>=0.10.0)
 - `rosbags` Python package (>=0.11.0, for message serialization)
+
+### Optional Dependencies
+
+For automatic message downloading from git repositories:
+```bash
+pip install zenoh-ros2-sdk[download]
+# or
+pip install GitPython>=3.1.18
+```
 
 ## Installation
 
@@ -162,17 +196,17 @@ pip install eclipse-zenoh rosbags
 ## Running Examples
 
 ```bash
-# Simple publisher
-python3 examples/simple_publisher.py
+# Publish String messages
+python3 examples/01_publish_string.py
 
-# Simple subscriber
-python3 examples/simple_subscriber.py
+# Subscribe to String messages
+python3 examples/02_subscribe_string.py
 
-# Custom message type
-python3 examples/custom_message_type.py
+# Publish Twist messages
+python3 examples/03_publish_twist.py
 
-# Multiple publishers
-python3 examples/multiple_publishers.py
+# Subscribe to Twist messages
+python3 examples/04_subscribe_twist.py
 ```
 
 ## Design Decisions
@@ -180,15 +214,19 @@ python3 examples/multiple_publishers.py
 1. **Singleton Session**: All publishers/subscribers share one Zenoh session for efficiency
 2. **Auto GID Generation**: Uses UUID4 for unique GIDs per publisher
 3. **Liveliness Tokens**: Automatically declared so publishers appear in `ros2 topic list`
-4. **Type Hash Lookup**: Common types have pre-computed hashes; custom types need to be provided
-5. **Clean API**: Abstracts away Zenoh/rmw_zenoh complexity
+4. **Type Hash Computation**: Automatically computes ROS2-compatible type hashes from message definitions using the same algorithm as ROS2
+5. **Message Registry**: Automatically downloads message definitions from Git repositories and caches them locally
+6. **Clean API**: Abstracts away Zenoh/rmw_zenoh complexity
 
 ## Future Improvements
 
-- [ ] Automatic type hash computation
 - [ ] Support for more message types out of the box
 - [ ] Service client/server support
 - [ ] Action support
 - [ ] Better error handling and retry logic
 - [ ] Connection pooling and reconnection
 - [ ] QoS configuration options
+
+## Acknowledgments
+
+The repository download and caching logic in `zenoh_ros2_sdk._cache` is adapted from [robot_descriptions.py](https://github.com/robot-descriptions/robot_descriptions.py) (Apache-2.0 licensed). Original work: Copyright 2022 Stéphane Caron, Copyright 2023 Inria.

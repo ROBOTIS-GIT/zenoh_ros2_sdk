@@ -5,6 +5,7 @@ import zenoh
 import uuid
 import threading
 from rosbags.typesys import get_types_from_msg, get_typestore, Stores
+from .message_registry import get_registry
 
 
 class ZenohSession:
@@ -41,6 +42,18 @@ class ZenohSession:
     def register_message_type(self, msg_definition: str, ros2_type_name: str):
         """Register a ROS2 message type"""
         if ros2_type_name not in self._registered_types:
+            # If msg_definition is empty, try to load from message registry
+            if not msg_definition.strip():
+                registry = get_registry()
+                if registry.is_loaded(ros2_type_name):
+                    # Already loaded, just return the class
+                    return self.store.types.get(ros2_type_name)
+                elif registry.load_message_type(ros2_type_name):
+                    # Successfully loaded from registry
+                    return self.store.types.get(ros2_type_name)
+                else:
+                    raise ValueError(f"Message type {ros2_type_name} not found in registry and no definition provided")
+            
             types = get_types_from_msg(msg_definition, ros2_type_name)
             self.store.register(types)
             self._registered_types[ros2_type_name] = types

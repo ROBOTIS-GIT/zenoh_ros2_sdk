@@ -1,0 +1,53 @@
+"""
+Git repository definitions for ROS2 message packages
+"""
+from dataclasses import dataclass
+from typing import Dict, List
+
+
+@dataclass
+class MessageRepository:
+    """Git repository containing ROS2 message definitions.
+    
+    Attributes:
+        url: URL to the remote git repository
+        commit: Commit ID or tag to checkout after cloning
+        cache_path: Path to clone the repository to in the local cache
+        msg_path: Relative path within the repo to message files (e.g., "msg/")
+        packages: List of message package names this repository contains (e.g., ["std_msgs", "geometry_msgs"])
+    """
+    url: str
+    commit: str
+    cache_path: str
+    msg_path: str
+    packages: List[str]
+
+
+# Repository definitions for common ROS2 message packages
+MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
+    # Common interfaces (contains many standard message packages)
+    # This is the main repository for ROS2 common message interfaces
+    "common_interfaces": MessageRepository(
+        url="https://github.com/ros2/common_interfaces.git",
+        commit="jazzy",  # Use specific commit/tag for reproducibility
+        cache_path="common_interfaces",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "std_msgs",
+            "geometry_msgs",
+            "sensor_msgs",
+            "nav_msgs",
+            "diagnostic_msgs",
+            "shape_msgs",
+            "stereo_msgs",
+            "trajectory_msgs",
+            "visualization_msgs",
+        ],
+    ),
+}
+
+# Mapping from message package namespace to repository name
+PACKAGE_TO_REPOSITORY: Dict[str, str] = {}
+for repo_name, repo in MESSAGE_REPOSITORIES.items():
+    for package in repo.packages:
+        PACKAGE_TO_REPOSITORY[package] = repo_name

@@ -19,7 +19,7 @@ class ROS2Publisher:
         self,
         topic: str,
         msg_type: str,
-        msg_definition: str,
+        msg_definition: str = "",
         node_name: Optional[str] = None,
         namespace: str = "/",
         domain_id: int = 0,
@@ -33,7 +33,7 @@ class ROS2Publisher:
         Args:
             topic: ROS2 topic name (e.g., "/chatter")
             msg_type: ROS2 message type (e.g., "std_msgs/msg/String")
-            msg_definition: Message definition text
+            msg_definition: Message definition text (empty string to auto-load from registry)
             node_name: Node name (auto-generated if None)
             namespace: Node namespace
             domain_id: ROS domain ID
@@ -58,7 +58,38 @@ class ROS2Publisher:
         
         # Get type hash if not provided
         if type_hash is None:
-            type_hash = get_type_hash(msg_type)
+            # Get message definition for hash computation
+            hash_msg_definition = msg_definition
+            if not hash_msg_definition:
+                # Try to get from message registry
+                try:
+                    from .message_registry import get_registry
+                    registry = get_registry()
+                    msg_file = registry.get_msg_file_path(msg_type)
+                    if msg_file and msg_file.exists():
+                        with open(msg_file, 'r') as f:
+                            hash_msg_definition = f.read()
+                except Exception:
+                    pass
+            
+            if not hash_msg_definition:
+                raise ValueError(
+                    f"Cannot compute type hash for {msg_type}: message definition not provided. "
+                    "Please provide msg_definition or ensure the message type is loaded in the registry."
+                )
+            
+            # Get dependencies from message registry if available
+            dependencies = None
+            try:
+                from .message_registry import get_registry
+                registry = get_registry()
+                # Extract dependencies - for nested types, we need to load them
+                # This is a simplified version - full implementation would parse the definition
+                # to find all nested types and load their definitions
+            except Exception:
+                pass
+            
+            type_hash = get_type_hash(msg_type, msg_definition=hash_msg_definition, dependencies=dependencies)
         self.type_hash = type_hash
         
         # Generate unique GID for this publisher
