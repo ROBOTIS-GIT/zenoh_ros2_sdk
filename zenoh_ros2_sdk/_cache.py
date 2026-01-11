@@ -13,6 +13,9 @@ from git import GitCommandError, InvalidGitRepositoryError, RemoteProgress, Repo
 import tqdm
 
 from ._repositories import MESSAGE_REPOSITORIES, MessageRepository, PACKAGE_TO_REPOSITORY
+from .logger import get_logger
+
+logger = get_logger("cache")
 
 
 class CloneProgressBar(RemoteProgress):
@@ -92,12 +95,12 @@ def clone_to_cache(repo_name: str, commit: Optional[str] = None) -> str:
         try:
             clone = Repo(target_dir)
         except InvalidGitRepositoryError:
-            print(f"Repository at {target_dir} is invalid, recreating it...")
+            logger.warning(f"Repository at {target_dir} is invalid, recreating it...")
             shutil.rmtree(target_dir)
             clone = None
     
     if clone is None:
-        print(f"Cloning {repository.url}...")
+        logger.info(f"Cloning {repository.url}...")
         os.makedirs(target_dir, exist_ok=True)
         progress_bar = CloneProgressBar()
         clone = Repo.clone_from(
@@ -112,7 +115,7 @@ def clone_to_cache(repo_name: str, commit: Optional[str] = None) -> str:
         try:
             clone.git.checkout(checkout_commit)
         except GitCommandError:
-            print(f"Commit {checkout_commit} not found, fetching origin...")
+            logger.debug(f"Commit {checkout_commit} not found, fetching origin...")
             clone.git.fetch("origin")
             clone.git.checkout(checkout_commit)
     
@@ -177,7 +180,7 @@ def get_message_file_path(
             return msg_file_path
         
     except Exception as e:
-        print(f"Warning: Failed to get message file for {msg_type}: {e}")
+        logger.warning(f"Failed to get message file for {msg_type}: {e}")
         return None
     
     return None

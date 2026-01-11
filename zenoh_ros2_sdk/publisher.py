@@ -10,6 +10,9 @@ from typing import Optional
 
 from .session import ZenohSession
 from .utils import ros2_to_dds_type, get_type_hash, mangle_name
+from .logger import get_logger
+
+logger = get_logger("publisher")
 
 
 class ROS2Publisher:
@@ -69,7 +72,9 @@ class ROS2Publisher:
                     if msg_file and msg_file.exists():
                         with open(msg_file, 'r') as f:
                             hash_msg_definition = f.read()
-                except Exception:
+                except Exception as e:
+                    # Registry not available or file not found - will raise ValueError below
+                    logger.debug(f"Could not load message definition from registry for {msg_type}: {e}")
                     pass
             
             if not hash_msg_definition:
@@ -83,10 +88,21 @@ class ROS2Publisher:
             try:
                 from .message_registry import get_registry
                 registry = get_registry()
-                # Extract dependencies - for nested types, we need to load them
-                # This is a simplified version - full implementation would parse the definition
-                # to find all nested types and load their definitions
-            except Exception:
+                # Extract dependencies from the message definition
+                dep_types = registry._extract_dependencies(hash_msg_definition, msg_type)
+                
+                if dep_types:
+                    # Load dependency message definitions
+                    dependencies = {}
+                    for dep_type in dep_types:
+                        dep_file = registry.get_msg_file_path(dep_type)
+                        if dep_file and dep_file.exists():
+                            with open(dep_file, 'r') as f:
+                                dependencies[dep_type] = f.read()
+            except Exception as e:
+                # If dependency loading fails, continue without dependencies
+                # Type hash computation will still work, just without nested type info
+                logger.debug(f"Could not load dependencies for {msg_type}: {e}")
                 pass
             
             type_hash = get_type_hash(msg_type, msg_definition=hash_msg_definition, dependencies=dependencies)
@@ -111,6 +127,7 @@ class ROS2Publisher:
         
         # Message counter
         self.sequence_number = 0
+        self._closed = False
     
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""
@@ -167,9 +184,32 @@ class ROS2Publisher:
         self.sequence_number += 1
     
     def close(self):
-        """Close the publisher and undeclare tokens"""
+        """
+        Close the publisher and undeclare tokens.
+        
+        This method is idempotent - it's safe to call multiple times.
+        """
+        # Check if already closed
+        if hasattr(self, '_closed') and self._closed:
+            return
+        
         try:
-            self.node_token.undeclare()
-            self.publisher_token.undeclare()
-        except:
-            pass
+            if hasattr(self, 'node_token') and self.node_token is not None:
+                self.node_token.undeclare()
+            if hasattr(self, 'publisher_token') and self.publisher_token is not None:
+                self.publisher_token.undeclare()
+            # Optionally undeclare the publisher itself (though tokens are the main cleanup)
+            if hasattr(self, 'pub') and self.pub is not None:
+                if hasattr(self.pub, 'undeclare'):
+                    self.pub.undeclare()
+                self.pub = None
+            self._closed = True
+        except (AttributeError, RuntimeError) as e:
+            # AttributeError: token doesn't exist
+            # RuntimeError: Zenoh runtime errors
+            logger.debug(f"Error during publisher cleanup for topic {self.topic}: {e}")
+            self._closed = True
+        except Exception as e:
+            # Catch any other unexpected exceptions during cleanup
+            logger.warning(f"Unexpected error during publisher cleanup for topic {self.topic}: {e}")
+            self._closed = True

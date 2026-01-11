@@ -8,6 +8,10 @@ from typing import Optional, Set, TYPE_CHECKING
 if TYPE_CHECKING:
     from .session import ZenohSession
 
+from .logger import get_logger
+
+logger = get_logger("message_registry")
+
 
 class MessageRegistry:
     """Registry for loading and managing ROS2 message definitions"""
@@ -93,7 +97,8 @@ class MessageRegistry:
             # Try one more time after potential download
             msg_file = self.get_msg_file_path(msg_type)
             if not msg_file:
-                return
+                # Message file not found - raise exception so it can be caught and logged
+                raise FileNotFoundError(f"Message file not found for type: {msg_type}")
         
         # Read message definition
         with open(msg_file, 'r') as f:
@@ -178,7 +183,7 @@ class MessageRegistry:
             self._load_dependencies(msg_type)
             return True
         except Exception as e:
-            print(f"Warning: Failed to load message type {msg_type}: {e}")
+            logger.warning(f"Failed to load message type {msg_type}: {e}")
             return False
     
     def get_message_class(self, msg_type: str):

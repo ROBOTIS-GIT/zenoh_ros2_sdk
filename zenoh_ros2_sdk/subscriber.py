@@ -6,6 +6,9 @@ from typing import Optional, Callable
 
 from .session import ZenohSession
 from .utils import ros2_to_dds_type, get_type_hash
+from .logger import get_logger
+
+logger = get_logger("subscriber")
 
 
 class ROS2Subscriber:
@@ -68,7 +71,9 @@ class ROS2Subscriber:
                     if msg_file and msg_file.exists():
                         with open(msg_file, 'r') as f:
                             hash_msg_definition = f.read()
-                except Exception:
+                except Exception as e:
+                    # Registry not available or file not found - will raise ValueError below
+                    logger.debug(f"Could not load message definition from registry for {msg_type}: {e}")
                     pass
             
             if not hash_msg_definition:
@@ -82,8 +87,21 @@ class ROS2Subscriber:
             try:
                 from .message_registry import get_registry
                 registry = get_registry()
-                # Extract dependencies - for nested types, we need to load them
-            except Exception:
+                # Extract dependencies from the message definition
+                dep_types = registry._extract_dependencies(hash_msg_definition, msg_type)
+                
+                if dep_types:
+                    # Load dependency message definitions
+                    dependencies = {}
+                    for dep_type in dep_types:
+                        dep_file = registry.get_msg_file_path(dep_type)
+                        if dep_file and dep_file.exists():
+                            with open(dep_file, 'r') as f:
+                                dependencies[dep_type] = f.read()
+            except Exception as e:
+                # If dependency loading fails, continue without dependencies
+                # Type hash computation will still work, just without nested type info
+                logger.debug(f"Could not load dependencies for {msg_type}: {e}")
                 pass
             
             type_hash = get_type_hash(msg_type, msg_definition=hash_msg_definition, dependencies=dependencies)
@@ -95,6 +113,7 @@ class ROS2Subscriber:
         
         # Create subscriber
         self.sub = self.session_mgr.session.declare_subscriber(self.keyexpr, self._listener)
+        self._closed = False
     
     def _listener(self, sample):
         """Internal message listener"""
@@ -103,9 +122,35 @@ class ROS2Subscriber:
             msg = self.session_mgr.store.deserialize_cdr(cdr_bytes, self.msg_type)
             self.callback(msg)
         except Exception as e:
-            print(f"Error deserializing message: {e}")
+            logger.error(f"Error deserializing message on topic {self.topic}: {e}", exc_info=True)
     
     def close(self):
-        """Close the subscriber"""
-        # Subscriber will be closed when session closes
-        pass
+        """
+        Close the subscriber and cleanup resources.
+        
+        This method is idempotent - it's safe to call multiple times.
+        """
+        # Check if already closed
+        if hasattr(self, '_closed') and self._closed:
+            return
+        
+        try:
+            if hasattr(self, 'sub') and self.sub is not None:
+                # Zenoh subscribers have an undeclare() method to explicitly remove them
+                # This is the proper way to clean up a subscriber
+                if hasattr(self.sub, 'undeclare'):
+                    self.sub.undeclare()
+                # Mark as closed
+                self.sub = None
+            self._closed = True
+        except (AttributeError, RuntimeError) as e:
+            # AttributeError: subscriber doesn't exist or undeclare method not available
+            # RuntimeError: Zenoh runtime errors
+            logger.debug(f"Error during subscriber cleanup for topic {self.topic}: {e}")
+            # Mark as closed even if undeclare failed to prevent retry loops
+            self._closed = True
+        except Exception as e:
+            # Catch any other unexpected exceptions during cleanup
+            # Log at warning level since this is unexpected
+            logger.warning(f"Unexpected error during subscriber cleanup for topic {self.topic}: {e}")
+            self._closed = True
