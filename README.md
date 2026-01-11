@@ -1,6 +1,6 @@
 # zenoh-ros2-sdk
 
-**Python SDK for ROS 2 communication via Zenoh - Use ROS 2 without ROS 2 environment
+**Python SDK for ROS 2 communication via Zenoh - Use ROS 2 without ROS 2 environment**
 
 Enable ROS 2 topic publishing and subscribing in pure Python applications. Publishers and subscribers automatically appear in `ros2 topic list` and work seamlessly with existing ROS 2 nodes using rmw_zenoh.
 
