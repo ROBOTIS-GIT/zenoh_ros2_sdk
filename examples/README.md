@@ -38,6 +38,22 @@ Demonstrates how to subscribe to `geometry_msgs/msg/Twist` messages and access n
 python3 examples/04_subscribe_twist.py
 ```
 
+### `05_publish_joint_state.py`
+Demonstrates how to publish `sensor_msgs/msg/JointState` messages, commonly used to report robot joint states (position, velocity, effort). Shows how to work with nested message types (Header, Time) and array fields.
+
+**Usage:**
+```bash
+python3 examples/05_publish_joint_state.py
+```
+
+### `06_subscribe_joint_state.py`
+Demonstrates how to subscribe to `sensor_msgs/msg/JointState` messages and access joint state information including joint names, positions, velocities, and efforts.
+
+**Usage:**
+```bash
+python3 examples/06_subscribe_joint_state.py
+```
+
 ## Running Examples
 
 Make sure you have:

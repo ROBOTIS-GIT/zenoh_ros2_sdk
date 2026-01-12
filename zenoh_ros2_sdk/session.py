@@ -12,7 +12,7 @@ class ZenohSession:
     """Manages a shared Zenoh session and type store"""
     _instance = None
     _lock = threading.Lock()
-    
+
     def __init__(self, router_ip: str = "127.0.0.1", router_port: int = 7447):
         self.router_ip = router_ip
         self.router_port = router_port
@@ -24,12 +24,12 @@ class ZenohSession:
         self._node_counter = 0
         self._entity_counter = 0
         self._lock = threading.Lock()
-        
+
         # Get session ID
         session_info = self.session.info
         self.session_id = str(session_info.zid())
         self.liveliness = self.session.liveliness()
-    
+
     @classmethod
     def get_instance(cls, router_ip: str = "127.0.0.1", router_port: int = 7447):
         """Get or create singleton instance"""
@@ -38,7 +38,7 @@ class ZenohSession:
                 if cls._instance is None:
                     cls._instance = cls(router_ip, router_port)
         return cls._instance
-    
+
     def register_message_type(self, msg_definition: str, ros2_type_name: str):
         """Register a ROS2 message type"""
         if ros2_type_name not in self._registered_types:
@@ -53,32 +53,32 @@ class ZenohSession:
                     return self.store.types.get(ros2_type_name)
                 else:
                     raise ValueError(f"Message type {ros2_type_name} not found in registry and no definition provided")
-            
+
             types = get_types_from_msg(msg_definition, ros2_type_name)
             self.store.register(types)
             self._registered_types[ros2_type_name] = types
         return self.store.types[ros2_type_name]
-    
+
     def get_next_node_id(self):
         """Get next available node ID"""
         with self._lock:
             node_id = self._node_counter
             self._node_counter += 1
             return node_id
-    
+
     def get_next_entity_id(self):
         """Get next available entity ID"""
         with self._lock:
             entity_id = self._entity_counter
             self._entity_counter += 1
             return entity_id
-    
+
     def generate_gid(self) -> bytes:
         """Generate a unique GID (16 bytes)"""
         # Use UUID to generate unique GID
         uuid_bytes = uuid.uuid4().bytes
         return uuid_bytes
-    
+
     def close(self):
         """Close the session"""
         if self.session:

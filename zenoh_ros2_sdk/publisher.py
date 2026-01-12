@@ -6,7 +6,7 @@ from zenoh import Encoding
 import time
 import struct
 import uuid
-from typing import Optional
+from typing import Optional, Dict, Set
 
 from .session import ZenohSession
 from .utils import ros2_to_dds_type, get_type_hash, mangle_name
@@ -17,7 +17,7 @@ logger = get_logger("publisher")
 
 class ROS2Publisher:
     """ROS2 Publisher using Zenoh - appears in ros2 topic list"""
-    
+
     def __init__(
         self,
         topic: str,
@@ -32,7 +32,7 @@ class ROS2Publisher:
     ):
         """
         Create a ROS2 publisher
-        
+
         Args:
             topic: ROS2 topic name (e.g., "/chatter")
             msg_type: ROS2 message type (e.g., "std_msgs/msg/String")
@@ -49,16 +49,16 @@ class ROS2Publisher:
         self.domain_id = domain_id
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_publisher_{uuid.uuid4().hex[:8]}"
-        
+
         # Get or create shared session
         self.session_mgr = ZenohSession.get_instance(router_ip, router_port)
-        
+
         # Register message type
         self.msg_class = self.session_mgr.register_message_type(msg_definition, msg_type)
-        
+
         # Get DDS type name (convert ROS2 type to DDS format)
         self.dds_type_name = ros2_to_dds_type(msg_type)
-        
+
         # Get type hash if not provided
         if type_hash is None:
             # Get message definition for hash computation
@@ -76,73 +76,93 @@ class ROS2Publisher:
                     # Registry not available or file not found - will raise ValueError below
                     logger.debug(f"Could not load message definition from registry for {msg_type}: {e}")
                     pass
-            
+
             if not hash_msg_definition:
                 raise ValueError(
                     f"Cannot compute type hash for {msg_type}: message definition not provided. "
                     "Please provide msg_definition or ensure the message type is loaded in the registry."
                 )
-            
-            # Get dependencies from message registry if available
+
+            # Get dependencies from message registry if available (recursively)
             dependencies = None
             try:
                 from .message_registry import get_registry
                 registry = get_registry()
-                # Extract dependencies from the message definition
-                dep_types = registry._extract_dependencies(hash_msg_definition, msg_type)
-                
-                if dep_types:
-                    # Load dependency message definitions
-                    dependencies = {}
+
+                def load_dependencies_recursive(msg_type: str, msg_def: str, visited: Optional[Set[str]] = None) -> Dict[str, str]:
+                    """Recursively load all dependencies including transitive ones."""
+                    if visited is None:
+                        visited = set()
+
+                    if msg_type in visited:
+                        return {}
+
+                    visited.add(msg_type)
+                    all_dependencies = {}
+
+                    # Extract direct dependencies (pass full type name, not just namespace)
+                    dep_types = registry._extract_dependencies(msg_def, msg_type)
+
                     for dep_type in dep_types:
-                        dep_file = registry.get_msg_file_path(dep_type)
-                        if dep_file and dep_file.exists():
-                            with open(dep_file, 'r') as f:
-                                dependencies[dep_type] = f.read()
+                        if dep_type not in visited:
+                            dep_file = registry.get_msg_file_path(dep_type)
+                            if dep_file and dep_file.exists():
+                                with open(dep_file, 'r') as f:
+                                    dep_def = f.read()
+                                all_dependencies[dep_type] = dep_def
+
+                                # Recursively load dependencies of this dependency
+                                nested_deps = load_dependencies_recursive(dep_type, dep_def, visited)
+                                all_dependencies.update(nested_deps)
+
+                    return all_dependencies
+
+                # Load all dependencies recursively
+                dependencies = load_dependencies_recursive(msg_type, hash_msg_definition)
             except Exception as e:
                 # If dependency loading fails, continue without dependencies
                 # Type hash computation will still work, just without nested type info
                 logger.debug(f"Could not load dependencies for {msg_type}: {e}")
                 pass
-            
+
             type_hash = get_type_hash(msg_type, msg_definition=hash_msg_definition, dependencies=dependencies)
         self.type_hash = type_hash
-        
+
         # Generate unique GID for this publisher
         self.publisher_gid = self.session_mgr.generate_gid()
-        
+
         # Get node and entity IDs
         self.node_id = self.session_mgr.get_next_node_id()
         self.entity_id = self.session_mgr.get_next_entity_id()
-        
+
         # Build keyexpr
         fully_qualified_name = topic.lstrip("/")
         self.keyexpr = f"{domain_id}/{fully_qualified_name}/{self.dds_type_name}/{type_hash}"
-        
+
         # Declare liveliness tokens
         self._declare_liveliness_tokens()
-        
+
         # Create publisher
         self.pub = self.session_mgr.session.declare_publisher(self.keyexpr)
-        
+
         # Message counter
         self.sequence_number = 0
         self._closed = False
-    
+
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""
         mangled_enclave = "%"
         mangled_namespace = mangle_name(self.namespace)
         mangled_topic = mangle_name(self.topic)
         qos = "::,7:,:,:,,"  # Default QoS
-        
+
         # Node token
         node_token_keyexpr = (
             f"@ros2_lv/{self.domain_id}/{self.session_mgr.session_id}/"
             f"{self.node_id}/{self.node_id}/NN/{mangled_enclave}/"
             f"{mangled_namespace}/{self.node_name}"
         )
-        
+
         # Publisher token
         publisher_token_keyexpr = (
             f"@ros2_lv/{self.domain_id}/{self.session_mgr.session_id}/"
@@ -150,10 +170,10 @@ class ROS2Publisher:
             f"{mangled_namespace}/{self.node_name}/{mangled_topic}/"
             f"{self.dds_type_name}/{self.type_hash}/{qos}"
         )
-        
+
         self.node_token = self.session_mgr.liveliness.declare_token(node_token_keyexpr)
         self.publisher_token = self.session_mgr.liveliness.declare_token(publisher_token_keyexpr)
-    
+
     def _create_attachment(self, seq_num: int, timestamp_ns: int) -> bytes:
         """Create rmw_zenoh attachment"""
         attachment = struct.pack('<Q', seq_num)  # sequence number
@@ -161,38 +181,38 @@ class ROS2Publisher:
         attachment += struct.pack('B', len(self.publisher_gid))  # GID length
         attachment += self.publisher_gid  # GID
         return attachment
-    
+
     def publish(self, **kwargs):
         """
         Publish a message
-        
+
         Args:
             **kwargs: Message field values (e.g., data="hello" for String message)
         """
         # Create message instance
         msg = self.msg_class(**kwargs)
-        
+
         # Serialize to CDR
         cdr_bytes = bytes(self.session_mgr.store.serialize_cdr(msg, self.msg_type))
-        
+
         # Create attachment
         timestamp_ns = int(time.time() * 1e9)
         attachment = self._create_attachment(self.sequence_number, timestamp_ns)
-        
+
         # Publish
         self.pub.put(cdr_bytes, encoding=Encoding("application/cdr"), attachment=attachment)
         self.sequence_number += 1
-    
+
     def close(self):
         """
         Close the publisher and undeclare tokens.
-        
+
         This method is idempotent - it's safe to call multiple times.
         """
         # Check if already closed
         if hasattr(self, '_closed') and self._closed:
             return
-        
+
         try:
             if hasattr(self, 'node_token') and self.node_token is not None:
                 self.node_token.undeclare()

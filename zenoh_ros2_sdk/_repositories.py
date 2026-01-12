@@ -8,7 +8,7 @@ from typing import Dict, List
 @dataclass
 class MessageRepository:
     """Git repository containing ROS2 message definitions.
-    
+
     Attributes:
         url: URL to the remote git repository
         commit: Commit ID or tag to checkout after cloning
@@ -25,6 +25,27 @@ class MessageRepository:
 
 # Repository definitions for common ROS2 message packages
 MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
+    # RCL interfaces (contains builtin_interfaces and other core interfaces)
+    # This repository contains messages and services used by ROS client libraries
+    # Reference: https://github.com/ros2/rcl_interfaces
+    "rcl_interfaces": MessageRepository(
+        url="https://github.com/ros2/rcl_interfaces.git",
+        commit="jazzy",  # Use specific commit/tag for reproducibility
+        cache_path="rcl_interfaces",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "builtin_interfaces",  # Required for Time, Duration, etc.
+            "action_msgs",
+            "composition_interfaces",
+            "lifecycle_msgs",
+            "rcl_interfaces",
+            "rosgraph_msgs",
+            "service_msgs",
+            "statistics_msgs",
+            "test_msgs",
+            "type_description_interfaces",
+        ],
+    ),
     # Common interfaces (contains many standard message packages)
     # This is the main repository for ROS2 common message interfaces
     "common_interfaces": MessageRepository(
