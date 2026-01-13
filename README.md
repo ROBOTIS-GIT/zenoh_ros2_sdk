@@ -167,14 +167,16 @@ pub.close()
 - Python 3.8+
 - `eclipse-zenoh` Python package (>=0.10.0)
 - `rosbags` Python package (>=0.11.0, for message serialization)
+- `GitPython` Python package (>=3.1.18, for automatic message downloading from git repositories)
+- `tqdm` Python package (>=4.64.0, for download progress indicators)
 
 ### Optional Dependencies
 
-For automatic message downloading from git repositories:
+For development and testing:
 ```bash
-pip install zenoh-ros2-sdk[download]
+pip install zenoh-ros2-sdk[dev]
 # or
-pip install GitPython>=3.1.18
+pip install pytest>=7.0.0 pytest-cov>=4.0.0 black>=22.0.0 flake8>=4.0.0
 ```
 
 ## Installation
@@ -187,10 +189,11 @@ cd zenoh_ros2_sdk
 pip install -e .
 ```
 
-### Dependencies
+### Install dependencies separately
 
+If installing from source, you can install dependencies separately:
 ```bash
-pip install eclipse-zenoh rosbags
+pip install eclipse-zenoh>=0.10.0 rosbags>=0.11.0 GitPython>=3.1.18 tqdm>=4.64.0
 ```
 
 ## Running Examples
