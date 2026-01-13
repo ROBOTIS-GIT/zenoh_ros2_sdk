@@ -10,9 +10,10 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 - ✅ **Appears in `ros2 topic list`** - Uses liveliness tokens for ROS 2 discovery
 - ✅ **Automatic resource management** - GIDs, node IDs, entity IDs handled automatically
 - ✅ **Session pooling** - Multiple publishers/subscribers share the same Zenoh session
-- ✅ **Automatic message loading** - Automatically downloads message definitions from Git repositories
-- ✅ **Type hash computation** - Computes ROS2-compatible type hashes from message definitions
-- ✅ **Type registration** - Automatic message type registration
+- ✅ **Automatic message/service loading** - Automatically downloads message and service definitions from Git repositories
+- ✅ **Type hash computation** - Computes ROS2-compatible type hashes from message/service definitions
+- ✅ **Type registration** - Automatic message and service type registration
+- ✅ **Service support** - Create service clients and servers with automatic type loading
 - ✅ **Clean API** - Simple, intuitive interface
 
 ## Quick Start
@@ -20,11 +21,9 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 ### Simple Publisher
 
 ```python
-from zenoh_ros2_sdk import ROS2Publisher, load_message_type
+from zenoh_ros2_sdk import ROS2Publisher
 
-# Load message type (automatically downloads if needed)
-load_message_type("std_msgs/msg/String")
-
+# Message type loading is automatic (no need to call load_message_type)
 # Create publisher - msg_definition is optional, auto-loads from registry
 pub = ROS2Publisher(
     topic="/chatter",
@@ -42,11 +41,9 @@ pub.close()
 ### Simple Subscriber
 
 ```python
-from zenoh_ros2_sdk import ROS2Subscriber, load_message_type
+from zenoh_ros2_sdk import ROS2Subscriber
 
-# Load message type (automatically downloads if needed)
-load_message_type("std_msgs/msg/String")
-
+# Message type loading is automatic (no need to call load_message_type)
 def on_message(msg):
     print(f"Received: {msg.data}")
 
@@ -63,6 +60,61 @@ import time
 time.sleep(10)
 
 sub.close()
+```
+
+### Simple Service Server
+
+```python
+from zenoh_ros2_sdk import ROS2ServiceServer, get_message_class
+
+# Service type loading is automatic (no need to call load_service_type)
+def service_handler(request):
+    # Get response message class
+    Response = get_message_class("example_interfaces/srv/AddTwoInts_Response")
+    # Process request and return response
+    return Response(sum=request.a + request.b)
+
+# Create service server
+server = ROS2ServiceServer(
+    service_name="/add_two_ints",
+    srv_type="example_interfaces/srv/AddTwoInts",
+    callback=service_handler,
+    domain_id=30
+)
+
+# Keep running
+import time
+time.sleep(10)
+
+server.close()
+```
+
+### Simple Service Client
+
+```python
+from zenoh_ros2_sdk import ROS2ServiceClient
+
+# Service type loading is automatic (no need to call load_service_type)
+# Create service client
+client = ROS2ServiceClient(
+    service_name="/add_two_ints",
+    srv_type="example_interfaces/srv/AddTwoInts",
+    domain_id=30
+)
+
+# Make synchronous service call
+response = client.call(a=5, b=3)
+if response:
+    print(f"Sum: {response.sum}")
+
+# Make asynchronous service call
+def callback(response):
+    if response:
+        print(f"Sum: {response.sum}")
+
+client.call_async(callback, a=10, b=20)
+
+client.close()
 ```
 
 ## Architecture
@@ -85,6 +137,18 @@ sub.close()
    - Deserializes CDR messages
    - Calls user callback
 
+4. **ROS2ServiceClient**
+   - Creates service client with liveliness tokens
+   - Sends requests using Zenoh queries
+   - Receives responses asynchronously
+   - Supports both synchronous and asynchronous calls
+
+5. **ROS2ServiceServer**
+   - Creates service server with liveliness tokens
+   - Receives requests via Zenoh queryable
+   - Calls user callback with request
+   - Sends response back to client
+
 ### Resource Management
 
 - **GID Generation**: Uses UUID4 to generate unique 16-byte GIDs
@@ -100,26 +164,28 @@ See the `examples/` directory for self-contained example scripts (numbered in re
 - `02_subscribe_string.py` - Basic subscriber example with String messages
 - `03_publish_twist.py` - Publishing Twist messages (nested types)
 - `04_subscribe_twist.py` - Subscribing to Twist messages (nested types)
+- `05_publish_joint_state.py` - Publishing JointState messages (arrays and nested types)
+- `06_subscribe_joint_state.py` - Subscribing to JointState messages (arrays and nested types)
+- `07_service_server.py` - Service server example (AddTwoInts service)
+- `08_service_client.py` - Service client example (synchronous and asynchronous calls)
 
-Each example is self-contained and uses automatic message loading. You can copy and modify them for your use cases.
+Each example is self-contained and uses automatic message/service type loading. You can copy and modify them for your use cases.
 
 ## Advanced Usage
 
 ### Using Message Registry (Recommended)
 
-The SDK automatically downloads message definitions from Git repositories:
+The SDK automatically downloads message definitions from Git repositories. Message types are loaded automatically when creating publishers/subscribers:
 
 ```python
-from zenoh_ros2_sdk import ROS2Publisher, load_message_type, get_message_class
+from zenoh_ros2_sdk import ROS2Publisher, get_message_class
 
-# Automatically loads message type and dependencies
-load_message_type("geometry_msgs/msg/Twist")
-
+# Message type loading is automatic - no need to call load_message_type
 # Get message classes for easy object creation
 Vector3 = get_message_class("geometry_msgs/msg/Vector3")
 Twist = get_message_class("geometry_msgs/msg/Twist")
 
-# Create publisher - no need to provide msg_definition
+# Create publisher - message type is automatically loaded
 pub = ROS2Publisher(
     topic="/cmd_vel",
     msg_type="geometry_msgs/msg/Twist",
@@ -210,6 +276,18 @@ python3 examples/03_publish_twist.py
 
 # Subscribe to Twist messages
 python3 examples/04_subscribe_twist.py
+
+# Publish JointState messages
+python3 examples/05_publish_joint_state.py
+
+# Subscribe to JointState messages
+python3 examples/06_subscribe_joint_state.py
+
+# Run service server
+python3 examples/07_service_server.py
+
+# Run service client (in another terminal)
+python3 examples/08_service_client.py
 ```
 
 ## Design Decisions
@@ -224,7 +302,6 @@ python3 examples/04_subscribe_twist.py
 ## Future Improvements
 
 - [ ] Support for more message types out of the box
-- [ ] Service client/server support
 - [ ] Action support
 - [ ] Better error handling and retry logic
 - [ ] Connection pooling and reconnection

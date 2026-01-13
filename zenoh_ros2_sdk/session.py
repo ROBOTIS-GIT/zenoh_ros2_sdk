@@ -5,7 +5,10 @@ import zenoh
 import uuid
 import threading
 from rosbags.typesys import get_types_from_msg, get_typestore, Stores
-from .message_registry import get_registry
+from .message_registry import get_registry, load_service_type
+from .logger import get_logger
+
+logger = get_logger("session")
 
 
 class ZenohSession:
@@ -41,23 +44,178 @@ class ZenohSession:
 
     def register_message_type(self, msg_definition: str, ros2_type_name: str):
         """Register a ROS2 message type"""
-        if ros2_type_name not in self._registered_types:
-            # If msg_definition is empty, try to load from message registry
-            if not msg_definition.strip():
-                registry = get_registry()
-                if registry.is_loaded(ros2_type_name):
-                    # Already loaded, just return the class
-                    return self.store.types.get(ros2_type_name)
-                elif registry.load_message_type(ros2_type_name):
-                    # Successfully loaded from registry
-                    return self.store.types.get(ros2_type_name)
-                else:
-                    raise ValueError(f"Message type {ros2_type_name} not found in registry and no definition provided")
+        # Check if already registered and in store
+        if ros2_type_name in self._registered_types:
+            # Get the actual store key (may be converted name for service types)
+            actual_key = self._registered_types[ros2_type_name]
+            if isinstance(actual_key, str):
+                # actual_key is the store key
+                msg_class = self.store.types.get(actual_key)
+                if msg_class is not None:
+                    return msg_class
+            else:
+                # actual_key is the types dict (old format), try direct lookup
+                msg_class = self.store.types.get(ros2_type_name)
+                if msg_class is not None:
+                    return msg_class
+                # Try converted name for service types
+                if '/srv/' in ros2_type_name:
+                    converted_name = ros2_type_name.replace('/srv/', '/srv/msg/')
+                    msg_class = self.store.types.get(converted_name)
+                    if msg_class is not None:
+                        # Update mapping to use converted name
+                        self._registered_types[ros2_type_name] = converted_name
+                        return msg_class
 
+            # If in _registered_types but not in store, something went wrong - clear it
+            logger.warning(f"Type {ros2_type_name} was marked as registered but not in store, re-registering")
+            del self._registered_types[ros2_type_name]
+
+        # If msg_definition is empty, try to load from message registry
+        if not msg_definition.strip():
+            registry = get_registry()
+            
+            # Check if this is a service request/response type
+            # Service types are like "namespace/srv/ServiceName_Request" or "namespace/srv/ServiceName_Response"
+            is_service_type = '/srv/' in ros2_type_name and ('_Request' in ros2_type_name or '_Response' in ros2_type_name)
+            
+            if is_service_type:
+                # For service types, we need to load the service type first
+                # Extract service type from request/response type
+                # e.g., "example_interfaces/srv/AddTwoInts_Request" -> "example_interfaces/srv/AddTwoInts"
+                if ros2_type_name.endswith('_Request'):
+                    srv_type = ros2_type_name[:-8]  # Remove "_Request"
+                elif ros2_type_name.endswith('_Response'):
+                    srv_type = ros2_type_name[:-9]  # Remove "_Response"
+                else:
+                    srv_type = None
+                
+                if srv_type:
+                    # Load the service type - this will register both request and response types
+                    if load_service_type(srv_type):
+                        # After loading, check if the type is now in _registered_types
+                        # (load_service_type calls register_message_type which adds it)
+                        if ros2_type_name in self._registered_types:
+                            # Type was registered, get it from store using the actual key
+                            actual_key = self._registered_types[ros2_type_name]
+                            if isinstance(actual_key, str):
+                                msg_class = self.store.types.get(actual_key)
+                                if msg_class is not None:
+                                    return msg_class
+                        
+                        # If not found via _registered_types, try direct lookup (both original and converted names)
+                        # Try converted name first (rosbags stores service types with /srv/msg/)
+                        converted_name = ros2_type_name.replace('/srv/', '/srv/msg/')
+                        msg_class = self.store.types.get(converted_name)
+                        if msg_class is not None:
+                            self._registered_types[ros2_type_name] = converted_name
+                            return msg_class
+                        
+                        # Try original name
+                        msg_class = self.store.types.get(ros2_type_name)
+                        if msg_class is not None:
+                            self._registered_types[ros2_type_name] = ros2_type_name
+                            return msg_class
+            
+            # For regular message types, use the existing logic
+            if registry.is_loaded(ros2_type_name):
+                # Already loaded, check if it's in the store (try both original and converted names)
+                msg_class = self.store.types.get(ros2_type_name)
+                if msg_class is None and '/srv/' in ros2_type_name:
+                    # Try converted name for service types
+                    converted_name = ros2_type_name.replace('/srv/', '/srv/msg/')
+                    msg_class = self.store.types.get(converted_name)
+                    if msg_class is not None:
+                        self._registered_types[ros2_type_name] = converted_name
+                        return msg_class
+                if msg_class is not None:
+                    # Store the mapping (use original name as key if found directly)
+                    self._registered_types[ros2_type_name] = ros2_type_name
+                    return msg_class
+            elif registry.load_message_type(ros2_type_name):
+                # Successfully loaded from registry, try both original and converted names
+                msg_class = self.store.types.get(ros2_type_name)
+                if msg_class is None and '/srv/' in ros2_type_name:
+                    # Try converted name for service types
+                    converted_name = ros2_type_name.replace('/srv/', '/srv/msg/')
+                    msg_class = self.store.types.get(converted_name)
+                    if msg_class is not None:
+                        self._registered_types[ros2_type_name] = converted_name
+                        return msg_class
+                if msg_class is not None:
+                    # Store the mapping (use original name as key if found directly)
+                    self._registered_types[ros2_type_name] = ros2_type_name
+                    return msg_class
+
+            # If we get here, the type wasn't found or couldn't be loaded
+            raise ValueError(
+                f"Message type {ros2_type_name} not found in registry and no definition provided. "
+                f"Please provide msg_definition or ensure the message type is loaded."
+            )
+
+        # Register the type from the provided definition
+        try:
             types = get_types_from_msg(msg_definition, ros2_type_name)
             self.store.register(types)
-            self._registered_types[ros2_type_name] = types
-        return self.store.types[ros2_type_name]
+
+            # get_types_from_msg may convert the type name (e.g., srv/TypeName -> srv/msg/TypeName)
+            # Find the actual key that was registered in the store
+            actual_type_key = None
+            for key in types.keys():
+                # Check if this key matches our type name
+                if key == ros2_type_name:
+                    actual_type_key = key
+                    break
+                # Handle conversion: srv/TypeName -> srv/msg/TypeName
+                # Check if the key is a converted version of our type name
+                if '/srv/' in ros2_type_name and '/srv/msg/' in key:
+                    # Extract the base name (everything after srv/)
+                    our_base = ros2_type_name.split('/srv/')[1]
+                    store_base = key.split('/srv/msg/')[1]
+                    if our_base == store_base:
+                        actual_type_key = key
+                        break
+
+            # If no match found, use the first (and likely only) key from types
+            if actual_type_key is None and types:
+                actual_type_key = list(types.keys())[0]
+
+            # Store mapping: our type name -> actual store key
+            if actual_type_key:
+                self._registered_types[ros2_type_name] = actual_type_key
+                msg_class = self.store.types.get(actual_type_key)
+                if msg_class is not None:
+                    return msg_class
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to register message type {ros2_type_name}: {e}"
+            ) from e
+
+        # Handle name conversion: rosbags converts srv/TypeName to srv/msg/TypeName
+        # Try original name first, then converted name
+        msg_class = self.store.types.get(ros2_type_name)
+        if msg_class is None:
+            # Try with /msg/ inserted (for service types: srv/ -> srv/msg/)
+            if '/srv/' in ros2_type_name:
+                converted_name = ros2_type_name.replace('/srv/', '/srv/msg/')
+                msg_class = self.store.types.get(converted_name)
+                if msg_class is not None:
+                    # Cache the mapping for future lookups
+                    self._registered_types[ros2_type_name] = converted_name
+                    return msg_class
+
+        if msg_class is None:
+            # Provide helpful error message
+            tried_names = [ros2_type_name]
+            if '/srv/' in ros2_type_name:
+                tried_names.append(ros2_type_name.replace('/srv/', '/srv/msg/'))
+            available = [k for k in self.store.types.keys() if ros2_type_name.split('/')[-1] in k][:5]
+            raise KeyError(
+                f"Message type {ros2_type_name} was registered but not found in store. "
+                f"Tried: {tried_names}. "
+                f"Available matching types: {available}"
+            )
+        return msg_class
 
     def get_next_node_id(self):
         """Get next available node ID"""

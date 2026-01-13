@@ -1,15 +1,15 @@
 """
 ROS2Publisher - ROS2 Publisher using Zenoh
 """
-import zenoh
 from zenoh import Encoding
 import time
 import struct
 import uuid
-from typing import Optional, Dict, Set
+from typing import Optional
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, get_type_hash, mangle_name
+from .utils import ros2_to_dds_type, get_type_hash, mangle_name, load_dependencies_recursive
+from .message_registry import get_registry
 from .logger import get_logger
 
 logger = get_logger("publisher")
@@ -66,7 +66,6 @@ class ROS2Publisher:
             if not hash_msg_definition:
                 # Try to get from message registry
                 try:
-                    from .message_registry import get_registry
                     registry = get_registry()
                     msg_file = registry.get_msg_file_path(msg_type)
                     if msg_file and msg_file.exists():
@@ -86,39 +85,9 @@ class ROS2Publisher:
             # Get dependencies from message registry if available (recursively)
             dependencies = None
             try:
-                from .message_registry import get_registry
                 registry = get_registry()
-
-                def load_dependencies_recursive(msg_type: str, msg_def: str, visited: Optional[Set[str]] = None) -> Dict[str, str]:
-                    """Recursively load all dependencies including transitive ones."""
-                    if visited is None:
-                        visited = set()
-
-                    if msg_type in visited:
-                        return {}
-
-                    visited.add(msg_type)
-                    all_dependencies = {}
-
-                    # Extract direct dependencies (pass full type name, not just namespace)
-                    dep_types = registry._extract_dependencies(msg_def, msg_type)
-
-                    for dep_type in dep_types:
-                        if dep_type not in visited:
-                            dep_file = registry.get_msg_file_path(dep_type)
-                            if dep_file and dep_file.exists():
-                                with open(dep_file, 'r') as f:
-                                    dep_def = f.read()
-                                all_dependencies[dep_type] = dep_def
-
-                                # Recursively load dependencies of this dependency
-                                nested_deps = load_dependencies_recursive(dep_type, dep_def, visited)
-                                all_dependencies.update(nested_deps)
-
-                    return all_dependencies
-
-                # Load all dependencies recursively
-                dependencies = load_dependencies_recursive(msg_type, hash_msg_definition)
+                # Load all dependencies recursively using shared utility function
+                dependencies = load_dependencies_recursive(msg_type, hash_msg_definition, registry)
             except Exception as e:
                 # If dependency loading fails, continue without dependencies
                 # Type hash computation will still work, just without nested type info

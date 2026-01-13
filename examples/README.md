@@ -54,6 +54,22 @@ Demonstrates how to subscribe to `sensor_msgs/msg/JointState` messages and acces
 python3 examples/06_subscribe_joint_state.py
 ```
 
+### `07_service_server.py`
+Demonstrates how to create a ROS2 service server using zenoh_ros2_sdk. This example creates an AddTwoInts service server that adds two integers. Shows automatic service type loading.
+
+**Usage:**
+```bash
+python3 examples/07_service_server.py
+```
+
+### `08_service_client.py`
+Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This example creates an AddTwoInts service client and makes both synchronous and asynchronous service calls. Shows automatic service type loading.
+
+**Usage:**
+```bash
+python3 examples/08_service_client.py
+```
+
 ## Running Examples
 
 Make sure you have:

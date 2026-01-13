@@ -18,6 +18,55 @@ from .logger import get_logger
 logger = get_logger("cache")
 
 
+def construct_message_path(
+    repo_path: str,
+    repository: MessageRepository,
+    namespace: str,
+    msg_type: str,  # "msg" or "srv"
+    file_name: str
+) -> str:
+    """
+    Construct path to message/service file based on repository structure.
+
+    Handles three repository structures:
+    1. Single-package repos: <repo_root>/msg/<file>.msg or <repo_root>/srv/<file>.srv
+    2. Repos with msg_path: <repo_root>/<msg_path>/<package>/msg/<file>.msg
+    3. Meta-package repos: <repo_root>/<package>/msg/<file>.msg
+
+    Args:
+        repo_path: Path to the cloned repository root
+        repository: MessageRepository configuration
+        namespace: Package namespace (e.g., "std_msgs", "example_interfaces")
+        msg_type: Type of file - "msg" or "srv"
+        file_name: Name of the message/service file (without extension)
+
+    Returns:
+        Full path to the message/service file
+    """
+    # Check if this is a single-package repository
+    # (repository contains only one package and it matches the namespace)
+    is_single_package = len(repository.packages) == 1 and repository.packages[0] == namespace
+
+    if is_single_package:
+        # Single-package repository: files are directly at repo root (msg/, srv/)
+        # Example: example_interfaces -> <repo>/msg/UInt32.msg
+        return os.path.join(repo_path, msg_type, f"{file_name}.{msg_type}")
+    elif repository.msg_path:
+        # Repository has a custom msg_path prefix (for future use)
+        # Example: if msg_path="ros2_msgs/" -> <repo>/ros2_msgs/std_msgs/msg/String.msg
+        return os.path.join(
+            repo_path,
+            repository.msg_path,
+            namespace,
+            msg_type,
+            f"{file_name}.{msg_type}"
+        )
+    else:
+        # Meta-package repository: files in package subdirectory
+        # Example: common_interfaces -> <repo>/std_msgs/msg/String.msg
+        return os.path.join(repo_path, namespace, msg_type, f"{file_name}.{msg_type}")
+
+
 class CloneProgressBar(RemoteProgress):
     """Progress bar when cloning."""
 
@@ -153,28 +202,10 @@ def get_message_file_path(
         repo_path = clone_to_cache(repo_name)
         repository = MESSAGE_REPOSITORIES[repo_name]
 
-        # Construct path to message file
-        # Structure: <repo_path>/<msg_path>/<package>/msg/<message>.msg
-        # For common_interfaces: <repo_path>/<package>/msg/<message>.msg (msg_path is "")
-        # For std_msgs: <repo_path>/msg/<message>.msg (msg_path is "msg/", package is in repo name)
-
-        if repository.msg_path:
-            # Repository has a msg_path prefix (e.g., "msg/" or "geometry_msgs/msg/")
-            msg_file_path = os.path.join(
-                repo_path,
-                repository.msg_path,
-                namespace,
-                msg,
-                f"{message_name}.msg"
-            )
-        else:
-            # Repository structure is <package>/msg/<message>.msg (e.g., common_interfaces)
-            msg_file_path = os.path.join(
-                repo_path,
-                namespace,
-                msg,
-                f"{message_name}.msg"
-            )
+        # Construct path to message file using shared helper function
+        msg_file_path = construct_message_path(
+            repo_path, repository, namespace, msg, message_name
+        )
 
         if os.path.exists(msg_file_path):
             return msg_file_path

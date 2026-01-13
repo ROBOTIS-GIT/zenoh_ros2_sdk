@@ -156,13 +156,14 @@ PRIMITIVE_TO_FIELD_TYPE = {
 
 def ros2_to_dds_type(ros2_type: str) -> str:
     """Convert ROS2 type name to DDS type name"""
-    # Format: namespace::msg::dds_::MessageName_
+    # Format: namespace::msg::dds_::MessageName_ or namespace::srv::dds_::ServiceName_
     parts = ros2_type.split("/")
     if len(parts) == 3:
-        namespace, msg, message_name = parts
-        # Capitalize first letter of message name
+        namespace, msg_or_srv, message_name = parts
+        # Capitalize first letter of message/service name
         message_name = message_name[0].upper() + message_name[1:] if message_name else ""
-        return f"{namespace}::msg::dds_::{message_name}_"
+        # Preserve msg/ or srv/ in the DDS type name
+        return f"{namespace}::{msg_or_srv}::dds_::{message_name}_"
     return ros2_type.replace("/", "::")
 
 
@@ -420,8 +421,253 @@ def get_type_hash(msg_type: str, msg_definition: Optional[str] = None, dependenc
     return compute_type_hash_from_msg(msg_type, msg_definition, dependencies)
 
 
+def compute_service_type_hash(
+    srv_type: str,
+    request_definition: str,
+    response_definition: str,
+    dependencies: Optional[Dict[str, str]] = None
+) -> str:
+    """
+    Compute ROS2 type hash for a service type.
+
+    Services in ROS2 are represented as a type with 3 nested fields:
+    - request_message (nested type pointing to request message)
+    - response_message (nested type pointing to response message)
+    - event_message (nested type pointing to event message)
+
+    The service type hash is computed from this service type structure,
+    not from just the request type.
+
+    Args:
+        srv_type: ROS2 service type (e.g., "example_interfaces/srv/AddTwoInts")
+        request_definition: Request message definition text
+        response_definition: Response message definition text
+        dependencies: Optional dict of {type_name: msg_definition} for nested types
+
+    Returns:
+        Type hash string in format RIHS01_<hash>
+    """
+    # Parse service type to get request and response types
+    parts = srv_type.split("/")
+    if len(parts) != 3:
+        raise ValueError(f"Invalid service type format: {srv_type}")
+    
+    # Validate that definitions are provided
+    if not request_definition or not request_definition.strip():
+        raise ValueError(f"Service definition is required for request. Service type: {srv_type}")
+    if not response_definition or not response_definition.strip():
+        raise ValueError(f"Service definition is required for response. Service type: {srv_type}")
+
+    namespace, srv, service_name = parts
+    request_type = f"{namespace}/srv/{service_name}_Request"
+    response_type = f"{namespace}/srv/{service_name}_Response"
+    # Event message type (for services, this is typically empty or a special type)
+    # For most services, event_message is not used, but we need to include it
+    # The event message is typically the same structure as the service itself
+    # For simplicity, we'll use an empty message type or the service type itself
+    event_type = f"{namespace}/srv/{service_name}_Event"
+
+    # Parse request and response definitions
+    request_fields = _parse_msg_definition(request_definition)
+    response_fields = _parse_msg_definition(response_definition)
+
+    # Build type map with request, response, and event message types
+    type_map = {}
+    type_map[request_type] = _serialize_type_description(request_type, request_fields)
+    type_map[response_type] = _serialize_type_description(response_type, response_fields)
+
+    # Event message has 3 fields:
+    # 1. info: service_msgs/msg/ServiceEventInfo
+    # 2. request: BoundedSequence of request type (max 1)
+    # 3. response: BoundedSequence of response type (max 1)
+    event_info_type = 'service_msgs/msg/ServiceEventInfo'
+    event_fields = [
+        {
+            'name': 'info',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE'],
+                'capacity': 0,
+                'string_capacity': 0,
+                'nested_type_name': event_info_type,
+            },
+            'default_value': '',
+        },
+        {
+            'name': 'request',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE_BOUNDED_SEQUENCE'],
+                'capacity': 1,  # BoundedSequence with max size 1
+                'string_capacity': 0,
+                'nested_type_name': request_type,
+            },
+            'default_value': '',
+        },
+        {
+            'name': 'response',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE_BOUNDED_SEQUENCE'],
+                'capacity': 1,  # BoundedSequence with max size 1
+                'string_capacity': 0,
+                'nested_type_name': response_type,
+            },
+            'default_value': '',
+        },
+    ]
+    type_map[event_type] = {
+        'type_name': event_type,
+        'fields': event_fields,
+    }
+
+    # ServiceEventInfo is a standard ROS2 message - we need to include it
+    # For now, we'll create a minimal ServiceEventInfo type
+    # ServiceEventInfo has: event_type (uint8), stamp (builtin_interfaces/Time), client_gid (uint8[16]), sequence_number (int64)
+    service_event_info_fields = [
+        {
+            'name': 'event_type',
+            'type': {'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_UINT8'], 'capacity': 0, 'string_capacity': 0, 'nested_type_name': ''},
+            'default_value': '',
+        },
+        {
+            'name': 'stamp',
+            'type': {'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE'], 'capacity': 0, 'string_capacity': 0, 'nested_type_name': 'builtin_interfaces/msg/Time'},
+            'default_value': '',
+        },
+        {
+            'name': 'client_gid',
+            'type': {'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_UINT8_ARRAY'], 'capacity': 16, 'string_capacity': 0, 'nested_type_name': ''},
+            'default_value': '',
+        },
+        {
+            'name': 'sequence_number',
+            'type': {'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_INT64'], 'capacity': 0, 'string_capacity': 0, 'nested_type_name': ''},
+            'default_value': '',
+        },
+    ]
+    type_map[event_info_type] = {
+        'type_name': event_info_type,
+        'fields': service_event_info_fields,
+    }
+
+    # builtin_interfaces/msg/Time is also needed
+    time_type = 'builtin_interfaces/msg/Time'
+    time_fields = [
+        {
+            'name': 'sec',
+            'type': {'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_INT32'], 'capacity': 0, 'string_capacity': 0, 'nested_type_name': ''},
+            'default_value': '',
+        },
+        {
+            'name': 'nanosec',
+            'type': {'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_UINT32'], 'capacity': 0, 'string_capacity': 0, 'nested_type_name': ''},
+            'default_value': '',
+        },
+    ]
+    type_map[time_type] = {
+        'type_name': time_type,
+        'fields': time_fields,
+    }
+
+    # Add dependencies
+    if dependencies:
+        for dep_type, dep_def in dependencies.items():
+            if dep_type not in type_map:
+                dep_fields = _parse_msg_definition(dep_def)
+                type_map[dep_type] = _serialize_type_description(dep_type, dep_fields)
+
+    # Create service type description with 3 nested fields
+    service_fields = [
+        {
+            'name': 'request_message',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE'],
+                'capacity': 0,
+                'string_capacity': 0,
+                'nested_type_name': request_type,
+            },
+            'default_value': '',
+        },
+        {
+            'name': 'response_message',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE'],
+                'capacity': 0,
+                'string_capacity': 0,
+                'nested_type_name': response_type,
+            },
+            'default_value': '',
+        },
+        {
+            'name': 'event_message',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_NESTED_TYPE'],
+                'capacity': 0,
+                'string_capacity': 0,
+                'nested_type_name': event_type,
+            },
+            'default_value': '',
+        },
+    ]
+
+    type_map[srv_type] = {
+        'type_name': srv_type,
+        'fields': service_fields,
+    }
+
+    # Extract full type description and compute hash
+    full_type_description = _extract_full_type_description(srv_type, type_map)
+    return _calculate_type_hash(full_type_description)
+
+
 def mangle_name(name: str) -> str:
     """Mangle a name by replacing / with %"""
     if not name or name == "/":
         return "%"
     return name.replace("/", "%")
+
+
+def load_dependencies_recursive(
+    msg_type: str,
+    msg_def: str,
+    registry,
+    visited: Optional[Set[str]] = None
+) -> Dict[str, str]:
+    """
+    Recursively load all message dependencies including transitive ones.
+
+    This function is shared across Publisher, Subscriber, ServiceClient, and ServiceServer
+    to avoid code duplication.
+
+    Args:
+        msg_type: Message type name (e.g., "geometry_msgs/msg/Twist")
+        msg_def: Message definition text
+        registry: MessageRegistry instance
+        visited: Set of already visited types to prevent cycles
+
+    Returns:
+        Dictionary mapping dependency type names to their definitions
+    """
+    if visited is None:
+        visited = set()
+
+    if msg_type in visited:
+        return {}
+
+    visited.add(msg_type)
+    all_dependencies = {}
+
+    # Extract direct dependencies (pass full type name, not just namespace)
+    dep_types = registry._extract_dependencies(msg_def, msg_type)
+
+    for dep_type in dep_types:
+        if dep_type not in visited:
+            dep_file = registry.get_msg_file_path(dep_type)
+            if dep_file and dep_file.exists():
+                with open(dep_file, 'r') as f:
+                    dep_def = f.read()
+                all_dependencies[dep_type] = dep_def
+
+                # Recursively load dependencies of this dependency
+                nested_deps = load_dependencies_recursive(dep_type, dep_def, registry, visited)
+                all_dependencies.update(nested_deps)
+
+    return all_dependencies

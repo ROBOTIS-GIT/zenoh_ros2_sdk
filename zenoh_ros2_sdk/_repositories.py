@@ -65,6 +65,18 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
             "visualization_msgs",
         ],
     ),
+    # Example interfaces (single package repository, not a meta-package)
+    # Structure: <repo_root>/msg/<message>.msg and <repo_root>/srv/<service>.srv
+    # Reference: https://github.com/ros2/example_interfaces
+    "example_interfaces": MessageRepository(
+        url="https://github.com/ros2/example_interfaces.git",
+        commit="rolling",  # Use rolling branch for latest examples
+        cache_path="example_interfaces",
+        msg_path="",  # Files are directly at repo root: msg/ and srv/ (not in a package subdirectory)
+        packages=[
+            "example_interfaces",  # Contains AddTwoInts service and other examples
+        ],
+    ),
 }
 
 # Mapping from message package namespace to repository name

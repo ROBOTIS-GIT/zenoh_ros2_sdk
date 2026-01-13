@@ -4,7 +4,10 @@ Unit tests for utility functions
 import os
 from pathlib import Path
 import pytest
-from zenoh_ros2_sdk.utils import ros2_to_dds_type, get_type_hash, mangle_name, compute_type_hash_from_msg
+from zenoh_ros2_sdk.utils import (
+    ros2_to_dds_type, get_type_hash, mangle_name, compute_type_hash_from_msg,
+    compute_service_type_hash
+)
 from zenoh_ros2_sdk.message_registry import get_registry
 
 
@@ -148,3 +151,69 @@ class TestMangleName:
     def test_no_slash(self):
         """Test mangling name without slashes"""
         assert mangle_name("chatter") == "chatter"
+
+
+class TestServiceTypeHash:
+    """Tests for service type hash computation"""
+
+    def test_compute_service_type_hash_add_two_ints(self):
+        """Test computing hash for example_interfaces/srv/AddTwoInts"""
+        request_def = "int64 a\nint64 b"
+        response_def = "int64 sum"
+
+        computed_hash = compute_service_type_hash(
+            "example_interfaces/srv/AddTwoInts",
+            request_definition=request_def,
+            response_definition=response_def
+        )
+
+        # Expected hash for example_interfaces/srv/AddTwoInts
+        expected_hash = "RIHS01_e118de6bf5eeb66a2491b5bda11202e7b68f198d6f67922cf30364858239c81a"
+
+        assert computed_hash == expected_hash, \
+            f"Service hash mismatch! Expected: {expected_hash}, Computed: {computed_hash}"
+        assert computed_hash.startswith("RIHS01_")
+        assert len(computed_hash) == 71  # RIHS01_ + 64 hex chars
+
+    def test_compute_service_type_hash_invalid_format(self):
+        """Test that invalid service type format raises ValueError"""
+        with pytest.raises(ValueError, match="Invalid service type format"):
+            compute_service_type_hash(
+                "invalid_format",
+                request_definition="int64 a",
+                response_definition="int64 b"
+            )
+
+    def test_compute_service_type_hash_missing_definitions(self):
+        """Test that missing definitions raise ValueError"""
+        with pytest.raises(ValueError):
+            compute_service_type_hash(
+                "example_interfaces/srv/AddTwoInts",
+                request_definition="",
+                response_definition="int64 sum"
+            )
+        
+        with pytest.raises(ValueError):
+            compute_service_type_hash(
+                "example_interfaces/srv/AddTwoInts",
+                request_definition="int64 a",
+                response_definition=""
+            )
+
+    def test_compute_service_type_hash_with_dependencies(self):
+        """Test computing service hash with dependencies"""
+        # This test verifies that dependencies are properly included
+        request_def = "int64 a\nint64 b"
+        response_def = "int64 sum"
+
+        # Even with empty dependencies, hash should be computed
+        computed_hash = compute_service_type_hash(
+            "example_interfaces/srv/AddTwoInts",
+            request_definition=request_def,
+            response_definition=response_def,
+            dependencies={}
+        )
+
+        # Should still match expected hash
+        expected_hash = "RIHS01_e118de6bf5eeb66a2491b5bda11202e7b68f198d6f67922cf30364858239c81a"
+        assert computed_hash == expected_hash

@@ -4,11 +4,13 @@ This directory contains the test suite for `zenoh-ros2-sdk`.
 
 ## Test Structure
 
-- **`test_utils.py`**: Unit tests for utility functions (type conversion, name mangling, etc.)
+- **`test_utils.py`**: Unit tests for utility functions (type conversion, name mangling, type hash computation, service type hash)
 - **`test_session.py`**: Unit tests for `ZenohSession` singleton pattern
 - **`test_publisher.py`**: Unit tests for `ROS2Publisher` class
 - **`test_subscriber.py`**: Unit tests for `ROS2Subscriber` class
-- **`test_integration.py`**: Integration tests requiring a running Zenoh router
+- **`test_service_client.py`**: Unit tests for `ROS2ServiceClient` class
+- **`test_service_server.py`**: Unit tests for `ROS2ServiceServer` class
+- **`test_integration.py`**: Integration tests requiring a running Zenoh router (publisher-subscriber and service client-server)
 - **`conftest.py`**: Pytest configuration and fixtures
 
 ## Running Tests
