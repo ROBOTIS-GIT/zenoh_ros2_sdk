@@ -44,5 +44,5 @@ zenoh_ros2_sdk/
 The main package (`zenoh_ros2_sdk`) exports:
 
 - `ROS2Publisher`: Create and manage ROS2 publishers
-- `ROS2Subscriber`: Create and manage ROS2 subscribers  
+- `ROS2Subscriber`: Create and manage ROS2 subscribers
 - `ZenohSession`: Access to the singleton session manager (typically not needed directly)

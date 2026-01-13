@@ -22,13 +22,13 @@ if not _logger.handlers:
 def get_logger(name: str = None) -> logging.Logger:
     """
     Get a logger for the zenoh-ros2-sdk package.
-    
+
     Args:
         name: Optional logger name (defaults to 'zenoh_ros2_sdk')
-        
+
     Returns:
         Logger instance
-        
+
     Example:
         >>> logger = get_logger()
         >>> logger.setLevel(logging.DEBUG)
