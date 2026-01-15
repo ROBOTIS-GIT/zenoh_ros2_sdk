@@ -1,7 +1,7 @@
 """
 ROS2Publisher - ROS2 Publisher using Zenoh
 """
-from zenoh import Encoding  # type: ignore[import-not-found]
+from zenoh import Encoding
 import time
 import struct
 import uuid
@@ -195,7 +195,7 @@ class ROS2Publisher:
         # Resolve Zenoh congestion control enum if available.
         cc = None
         try:
-            import zenoh  # type: ignore[import-not-found]
+            import zenoh
             qos_mod = getattr(zenoh, "qos", None)
             cc_enum = getattr(qos_mod, "CongestionControl", None) if qos_mod is not None else None
             if cc_enum is not None:

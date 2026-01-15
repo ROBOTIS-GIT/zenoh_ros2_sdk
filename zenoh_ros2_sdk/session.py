@@ -1,14 +1,79 @@
 """
 ZenohSession - Manages shared Zenoh session and type store
 """
-import zenoh  # type: ignore[import-not-found]
+import os
+import json
+import json5
+import zenoh
 import uuid
 import threading
-from rosbags.typesys import get_types_from_msg, get_typestore, Stores  # type: ignore[import-not-found]
+from rosbags.typesys import get_types_from_msg, get_typestore, Stores
 from .message_registry import get_registry, load_service_type
 from .logger import get_logger
 
 logger = get_logger("session")
+
+
+def _parse_zenoh_config_override(override: str) -> list[tuple[str, str]]:
+    """
+    Parse `ZENOH_CONFIG_OVERRIDE`-style strings into (path, json5_value) pairs.
+
+    Format:
+      "path/to/key=value;other/key=[1,2,3];mode=\"client\""
+
+    Notes:
+    - Values are passed verbatim to `zenoh.Config.insert_json5`.
+    - Splits on ';' (no escaping supported).
+    """
+    if override is None:
+        return []
+    override = override.strip()
+    if not override:
+        return []
+
+    pairs: list[tuple[str, str]] = []
+    for part in override.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise ValueError(
+                f"Invalid ZENOH_CONFIG_OVERRIDE segment {part!r}: expected 'path=value'"
+            )
+        path, value = part.split("=", 1)
+        path = path.strip()
+        value = value.strip()
+        if not path:
+            raise ValueError(
+                f"Invalid ZENOH_CONFIG_OVERRIDE segment {part!r}: empty path"
+            )
+        if value == "":
+            raise ValueError(
+                f"Invalid ZENOH_CONFIG_OVERRIDE segment {part!r}: empty value"
+            )
+        pairs.append((path, value))
+    return pairs
+
+
+def _apply_zenoh_config_override(conf: "zenoh.Config", override: str) -> None:
+    """
+    Apply override pairs onto an existing config (later entries win).
+
+    Values are parsed as JSON5 first (like ros-z), then serialized to JSON
+    before being passed to `insert_json5`.
+    """
+    for path, json5_value in _parse_zenoh_config_override(override):
+        try:
+            parsed = json5.loads(json5_value)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to parse ZENOH_CONFIG_OVERRIDE value as JSON5 for key {path!r}: "
+                f"{json5_value!r} ({e})"
+            ) from e
+
+        # Serialize to JSON; zenoh's insert_json5 accepts JSON too.
+        value_str = json.dumps(parsed)
+        conf.insert_json5(path, value_str)
 
 
 class ZenohSession:
@@ -20,7 +85,15 @@ class ZenohSession:
         self.router_ip = router_ip
         self.router_port = router_port
         self.conf = zenoh.Config()
-        self.conf.insert_json5("connect/endpoints", f'["tcp/{router_ip}:{router_port}"]')
+        # Defaults (can be overridden via ZENOH_CONFIG_OVERRIDE)
+        self.conf.insert_json5(
+            "connect/endpoints", f'["tcp/{router_ip}:{router_port}"]'
+        )
+
+        override = os.environ.get("ZENOH_CONFIG_OVERRIDE", "").strip()
+        if override:
+            _apply_zenoh_config_override(self.conf, override)
+
         self.session = zenoh.open(self.conf)
         self.store = get_typestore(Stores.EMPTY)
         self._registered_types = {}
@@ -74,11 +147,11 @@ class ZenohSession:
         # If msg_definition is empty, try to load from message registry
         if not msg_definition.strip():
             registry = get_registry()
-            
+
             # Check if this is a service request/response type
             # Service types are like "namespace/srv/ServiceName_Request" or "namespace/srv/ServiceName_Response"
             is_service_type = '/srv/' in ros2_type_name and ('_Request' in ros2_type_name or '_Response' in ros2_type_name)
-            
+
             if is_service_type:
                 # For service types, we need to load the service type first
                 # Extract service type from request/response type
@@ -89,7 +162,7 @@ class ZenohSession:
                     srv_type = ros2_type_name[:-9]  # Remove "_Response"
                 else:
                     srv_type = None
-                
+
                 if srv_type:
                     # Load the service type - this will register both request and response types
                     if load_service_type(srv_type):
@@ -102,7 +175,7 @@ class ZenohSession:
                                 msg_class = self.store.types.get(actual_key)
                                 if msg_class is not None:
                                     return msg_class
-                        
+
                         # If not found via _registered_types, try direct lookup (both original and converted names)
                         # Try converted name first (rosbags stores service types with /srv/msg/)
                         converted_name = ros2_type_name.replace('/srv/', '/srv/msg/')
@@ -110,13 +183,13 @@ class ZenohSession:
                         if msg_class is not None:
                             self._registered_types[ros2_type_name] = converted_name
                             return msg_class
-                        
+
                         # Try original name
                         msg_class = self.store.types.get(ros2_type_name)
                         if msg_class is not None:
                             self._registered_types[ros2_type_name] = ros2_type_name
                             return msg_class
-            
+
             # For regular message types, use the existing logic
             if registry.is_loaded(ros2_type_name):
                 # Already loaded, check if it's in the store (try both original and converted names)

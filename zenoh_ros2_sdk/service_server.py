@@ -1,8 +1,8 @@
 """
 ROS2ServiceServer - ROS2 Service Server using Zenoh
 """
-import zenoh  # type: ignore[import-not-found]
-from zenoh import Encoding  # type: ignore[import-not-found]
+import zenoh
+from zenoh import Encoding
 import time
 import uuid
 from dataclasses import dataclass

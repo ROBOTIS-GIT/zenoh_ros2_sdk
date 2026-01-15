@@ -115,3 +115,56 @@ class TestZenohSessionSingleton:
             except:
                 pass
             ZenohSession._instance = None
+
+
+def test_parse_zenoh_config_override():
+    from zenoh_ros2_sdk.session import _parse_zenoh_config_override
+
+    override = (
+        'transport/shared_memory/enabled=true;'
+        'mode="client";'
+        'connect/endpoints=["tcp/192.168.6.2:7447"]'
+    )
+    assert _parse_zenoh_config_override(override) == [
+        ("transport/shared_memory/enabled", "true"),
+        ("mode", '"client"'),
+        ("connect/endpoints", '["tcp/192.168.6.2:7447"]'),
+    ]
+
+
+def test_apply_zenoh_config_override_parses_json5(monkeypatch):
+    # Avoid needing a live zenoh runtime: just capture insert_json5 calls.
+    from zenoh_ros2_sdk.session import _apply_zenoh_config_override
+
+    class DummyConf:
+        def __init__(self):
+            self.calls = []
+
+        def insert_json5(self, path, value):
+            self.calls.append((path, value))
+
+    conf = DummyConf()
+
+    override = 'mode="client";connect/endpoints=["tcp/127.0.0.1:7447"];transport/shared_memory/enabled=true'
+    _apply_zenoh_config_override(conf, override)
+
+    # Values should be serialized JSON (not raw JSON5)
+    assert conf.calls == [
+        ("mode", '"client"'),
+        ("connect/endpoints", '["tcp/127.0.0.1:7447"]'),
+        ("transport/shared_memory/enabled", "true"),
+    ]
+
+
+def test_apply_zenoh_config_override_rejects_invalid_json5():
+    from zenoh_ros2_sdk.session import _apply_zenoh_config_override
+
+    class DummyConf:
+        def insert_json5(self, path, value):
+            pass
+
+    conf = DummyConf()
+
+    # mode without quotes is invalid JSON5 (bare identifier)
+    with pytest.raises(ValueError):
+        _apply_zenoh_config_override(conf, "mode=client")

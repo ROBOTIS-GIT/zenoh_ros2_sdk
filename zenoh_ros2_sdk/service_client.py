@@ -1,8 +1,8 @@
 """
 ROS2ServiceClient - ROS2 Service Client using Zenoh
 """
-import zenoh  # type: ignore[import-not-found]
-from zenoh import Encoding  # type: ignore[import-not-found]
+import zenoh
+from zenoh import Encoding
 import time
 import struct
 import uuid

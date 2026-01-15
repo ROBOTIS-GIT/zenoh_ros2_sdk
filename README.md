@@ -233,6 +233,19 @@ pub.close()
 - `node_name`: Custom node name (auto-generated if not provided)
 - `namespace`: Node namespace (default: "/")
 
+### Zenoh configuration override (advanced)
+
+You can override the Zenoh session configuration using the `ZENOH_CONFIG_OVERRIDE`
+environment variable (a semicolon-separated list of `path=value` entries). This is
+useful for enabling features like shared memory transport or forcing client mode:
+
+```bash
+export ZENOH_CONFIG_OVERRIDE='transport/shared_memory/enabled=true;mode="client";connect/endpoints=["tcp/192.168.6.2:7447"]'
+```
+
+Notes:
+- Values are parsed as **JSON5**. If the value is a string, it must be quoted (e.g., `mode="client"`).
+
 ## Requirements
 
 - Python 3.8+
