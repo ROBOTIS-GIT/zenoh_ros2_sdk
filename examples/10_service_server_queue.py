@@ -34,13 +34,15 @@ def main():
     try:
         print("Waiting for service requests... Ctrl+C to stop")
         while True:
-            key, req = server.take_request(timeout=1.0)
+            try:
+                key, req = server.take_request(timeout=1.0)
+            except TimeoutError:
+                # no request within timeout; keep waiting
+                continue
+
             print(f"Got request: a={req.a} b={req.b} key={key}")
             resp = Response(sum=req.a + req.b)
             server.send_response(key, resp)
-    except TimeoutError:
-        # no request within timeout; loop continues
-        pass
     except KeyboardInterrupt:
         print("\nInterrupted")
     finally:
@@ -48,10 +50,5 @@ def main():
 
 
 if __name__ == "__main__":
-    while True:
-        try:
-            main()
-            break
-        except TimeoutError:
-            time.sleep(0.1)
+    main()
 

@@ -163,7 +163,7 @@ client.close()
 
 ## Examples
 
-See the `examples/` directory for self-contained example scripts (numbered in recommended learning order):
+See the [`examples/`](examples/) folder (and [`examples/README.md`](examples/README.md)) for self-contained example scripts (numbered in recommended learning order):
 
 - `01_publish_string.py` - Basic publisher example with String messages
 - `02_subscribe_string.py` - Basic subscriber example with String messages
@@ -173,6 +173,8 @@ See the `examples/` directory for self-contained example scripts (numbered in re
 - `06_subscribe_joint_state.py` - Subscribing to JointState messages (arrays and nested types)
 - `07_service_server.py` - Service server example (AddTwoInts service)
 - `08_service_client.py` - Service client example (synchronous and asynchronous calls)
+- `09_subscribe_compressed_image.py` - Subscribe to CompressedImage messages (camera stream example; ZED topic by default)
+- `10_service_server_queue.py` - Service server example (queue mode; ros-z style: `take_request()` / `send_response()`)
 
 Each example is self-contained and uses automatic message/service type loading. You can copy and modify them for your use cases.
 
@@ -308,6 +310,12 @@ python3 examples/07_service_server.py
 
 # Run service client (in another terminal)
 python3 examples/08_service_client.py
+
+# Subscribe to CompressedImage (edit topic/router_ip in the script if needed)
+python3 examples/09_subscribe_compressed_image.py
+
+# Service server (queue mode)
+python3 examples/10_service_server_queue.py
 ```
 
 ## Design Decisions

@@ -70,28 +70,22 @@ Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This exam
 python3 examples/08_service_client.py
 ```
 
-### `10_service_server_queue.py`
-Service server queue-mode (ros-z style): `take_request()` / `send_response()` with a correlation key.
-
-**Usage:**
-```bash
-python3 examples/10_service_server_queue.py
-```
-
 ### `09_subscribe_compressed_image.py`
-Subscribes to a ZED `sensor_msgs/msg/CompressedImage` stream (useful for verifying camera streams over Zenoh).
+Demonstrates how to subscribe to `sensor_msgs/msg/CompressedImage` messages (camera stream example; ZED topic by default).
 
 **Usage:**
 ```bash
 python3 examples/09_subscribe_compressed_image.py
 ```
 
-### `09_subscribe_compressed_image_debug.py`
-Same as `09_subscribe_compressed_image.py`, plus prints the internal key expression and type hash for troubleshooting.
+Note: this example uses a ZED topic and a non-local `router_ip` by default. Edit the script to match your setup.
+
+### `10_service_server_queue.py`
+Demonstrates a service server in queue mode (ros-z style): `take_request()` / `send_response()` with a correlation key.
 
 **Usage:**
 ```bash
-python3 examples/09_subscribe_compressed_image_debug.py
+python3 examples/10_service_server_queue.py
 ```
 
 ## Running Examples
