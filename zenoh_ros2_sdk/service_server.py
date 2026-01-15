@@ -1,19 +1,35 @@
 """
 ROS2ServiceServer - ROS2 Service Server using Zenoh
 """
-import zenoh
-from zenoh import Encoding
-import struct
+import zenoh  # type: ignore[import-not-found]
+from zenoh import Encoding  # type: ignore[import-not-found]
 import time
 import uuid
-from typing import Optional, Dict, Callable
+from dataclasses import dataclass
+from typing import Optional, Dict, Callable, Tuple
+import threading
+from collections import deque
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, compute_service_type_hash, mangle_name, load_dependencies_recursive
+from .utils import ros2_to_dds_type, compute_service_type_hash, load_dependencies_recursive
+from .entity import EntityKind, NodeEntity, EndpointEntity
+from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
+from .qos import QosProfile, DEFAULT_QOS_PROFILE
+from .attachment import Attachment
 from .message_registry import get_registry
 from .logger import get_logger
 
 logger = get_logger("service_server")
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceRequestKey:
+    """
+    Correlation key for service requests, aligned with ros-z QueryKey and rmw_zenoh.
+    """
+
+    sequence_id: int
+    gid: bytes
 
 
 class ROS2ServiceServer:
@@ -23,7 +39,7 @@ class ROS2ServiceServer:
         self,
         service_name: str,
         srv_type: str,
-        callback: Callable,
+        callback: Optional[Callable] = None,
         request_definition: str = "",
         response_definition: str = "",
         node_name: Optional[str] = None,
@@ -31,10 +47,21 @@ class ROS2ServiceServer:
         domain_id: int = 0,
         router_ip: str = "127.0.0.1",
         router_port: int = 7447,
-        type_hash: Optional[str] = None
+        type_hash: Optional[str] = None,
+        qos: Optional[object] = None,
+        mode: str = "callback",
     ):
         """
-        Create a ROS2 service server
+        Create a ROS2 service server.
+
+        Modes:
+            - `mode="callback"` (default): `callback(request_msg) -> response_msg` is called and the server replies immediately.
+            - `mode="queue"`: requests are queued; user calls `take_request()` then `send_response()` with the returned key.
+
+        Attachments:
+            Service requests **must** include an attachment (sequence_id + gid). The server uses this to:
+            - correlate requests/responses
+            - reply with an attachment that contains the same (sequence_id, gid) plus a new timestamp
 
         Args:
             service_name: ROS2 service name (e.g., "/add_two_ints")
@@ -48,13 +75,27 @@ class ROS2ServiceServer:
             router_ip: Zenoh router IP
             router_port: Zenoh router port
             type_hash: Service type hash (auto-detected if None)
+            qos: QoS used for liveliness discovery tokens.
+                Accepts `QosProfile`, an encoded rmw_zenoh QoS string, or `None` for default.
+            mode: `callback` or `queue`.
+
+        Raises:
+            ValueError: If `srv_type` format is invalid or if mode/callback is inconsistent.
+            RuntimeError: If called queue-only APIs while not in queue mode.
         """
+        if mode not in ("callback", "queue"):
+            raise ValueError(f"Invalid mode: {mode}. Expected 'callback' or 'queue'")
+        if mode == "callback" and callback is None:
+            raise ValueError("callback must be provided when mode='callback'")
+
         self.service_name = service_name
         self.srv_type = srv_type
         self.callback = callback
+        self.mode = mode
         self.domain_id = domain_id
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_service_server_{uuid.uuid4().hex[:8]}"
+        _, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
 
         # Get or create shared session
         self.session_mgr = ZenohSession.get_instance(router_ip, router_port)
@@ -172,8 +213,7 @@ class ROS2ServiceServer:
         self.entity_id = self.session_mgr.get_next_entity_id()
 
         # Build keyexpr for service (used for queryable)
-        fully_qualified_name = service_name.lstrip("/")
-        self.keyexpr = f"{domain_id}/{fully_qualified_name}/{self.dds_type_name}/{type_hash}"
+        self.keyexpr = topic_keyexpr(domain_id, service_name, self.dds_type_name, type_hash)
         logger.info(f"Service keyexpr: {self.keyexpr}")
         logger.info(f"Service type hash: {type_hash}")
 
@@ -192,107 +232,116 @@ class ROS2ServiceServer:
         )
         logger.info(f"Queryable declared successfully on: {self.keyexpr}")
 
+        # Queue-mode state (ros-z style)
+        self._lock = threading.Lock()
+        self._cv = threading.Condition(self._lock)
+        self._queue: deque[Tuple[ServiceRequestKey, object]] = deque()
+        self._pending_queries: Dict[ServiceRequestKey, zenoh.Query] = {}
+
         self._closed = False
+
+    @staticmethod
+    def _normalize_qos(
+        qos: Optional[object],
+        *,
+        default: QosProfile,
+        fallback: str,
+    ) -> tuple[QosProfile, str]:
+        if qos is None:
+            return default, fallback
+        if isinstance(qos, QosProfile):
+            return qos, qos.encode()
+        if isinstance(qos, str):
+            return QosProfile.decode(qos), qos
+        return default, fallback
 
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""
-        mangled_enclave = "%"
-        mangled_namespace = mangle_name(self.namespace)
-        mangled_service = mangle_name(self.service_name)
-        qos = "::,7:,:,:,,"  # Default QoS
-
-        # Node token
-        node_token_keyexpr = (
-            f"@ros2_lv/{self.domain_id}/{self.session_mgr.session_id}/"
-            f"{self.node_id}/{self.node_id}/NN/{mangled_enclave}/"
-            f"{mangled_namespace}/{self.node_name}"
+        node = NodeEntity(
+            domain_id=self.domain_id,
+            session_id=self.session_mgr.session_id,
+            node_id=self.node_id,
+            node_name=self.node_name,
+            namespace=self.namespace,
+        )
+        ep = EndpointEntity(
+            node=node,
+            entity_id=self.entity_id,
+            kind=EntityKind.SERVICE,
+            name=self.service_name,
+            dds_type_name=self.dds_type_name,
+            type_hash=self.type_hash,
+            qos=self.qos,
+            gid=self.server_gid,
         )
 
-        # Service token (SS = Service Server, not MS)
-        service_token_keyexpr = (
-            f"@ros2_lv/{self.domain_id}/{self.session_mgr.session_id}/"
-            f"{self.node_id}/{self.entity_id}/SS/{mangled_enclave}/"
-            f"{mangled_namespace}/{self.node_name}/{mangled_service}/"
-            f"{self.dds_type_name}/{self.type_hash}/{qos}"
-        )
-
-        self.node_token = self.session_mgr.liveliness.declare_token(node_token_keyexpr)
-        self.service_token = self.session_mgr.liveliness.declare_token(service_token_keyexpr)
-
-    def _parse_attachment(self, attachment: bytes) -> Optional[Dict]:
-        """Parse rmw_zenoh attachment from service request"""
-        try:
-            if len(attachment) < 17:  # Minimum size: 8 (seq) + 8 (timestamp) + 1 (gid_len)
-                return None
-
-            seq_num = struct.unpack('<Q', attachment[0:8])[0]
-            timestamp_ns = struct.unpack('<Q', attachment[8:16])[0]
-            gid_len = struct.unpack('B', attachment[16:17])[0]
-
-            if len(attachment) < 17 + gid_len:
-                return None
-
-            gid = attachment[17:17+gid_len]
-
-            return {
-                "sequence_id": seq_num,
-                "timestamp_ns": timestamp_ns,
-                "gid": gid
-            }
-        except Exception as e:
-            logger.error(f"Error parsing attachment: {e}")
-            return None
+        self.node_token = self.session_mgr.liveliness.declare_token(node_liveliness_keyexpr(node))
+        self.service_token = self.session_mgr.liveliness.declare_token(endpoint_liveliness_keyexpr(ep))
 
     def _create_response_attachment(self, request_seq_num: int, request_gid: bytes) -> bytes:
-        """Create rmw_zenoh attachment for service response
+        """Create rmw_zenoh attachment for service response (seq + new_ts + same_gid)."""
+        timestamp_ns = int(time.time() * 1e9)
+        return Attachment(sequence_id=request_seq_num, timestamp_ns=timestamp_ns, gid=request_gid).to_bytes()
 
-        Following rmw_zenoh design: includes sequence number from request,
-        new timestamp for reply, and client GID from request.
+    def take_request(self, timeout: Optional[float] = None) -> Tuple[ServiceRequestKey, object]:
         """
-        timestamp_ns = int(time.time() * 1e9)  # Current timestamp for reply
-        attachment = struct.pack('<Q', request_seq_num)  # sequence number from request
-        attachment += struct.pack('<Q', timestamp_ns)  # timestamp for reply
-        attachment += struct.pack('B', len(request_gid))  # GID length
-        attachment += request_gid  # GID from request
-        return attachment
+        Queue-mode API (ros-z style): block until a request is available, then return (key, request_msg).
+        """
+        if self.mode != "queue":
+            raise RuntimeError("take_request() is only available when mode='queue'")
+        with self._cv:
+            if timeout is None:
+                while not self._queue:
+                    self._cv.wait()
+            else:
+                end = time.time() + timeout
+                while not self._queue:
+                    remaining = end - time.time()
+                    if remaining <= 0:
+                        raise TimeoutError("Timed out waiting for service request")
+                    self._cv.wait(timeout=remaining)
+            key, msg = self._queue.popleft()
+            return key, msg
+
+    def send_response(self, key: ServiceRequestKey, response_msg: object) -> None:
+        """
+        Queue-mode API (ros-z style): reply to a previously taken request using its correlation key.
+        """
+        if self.mode != "queue":
+            raise RuntimeError("send_response() is only available when mode='queue'")
+        with self._lock:
+            query = self._pending_queries.pop(key, None)
+        if query is None:
+            raise KeyError(f"No pending query found for key={key}")
+
+        response_cdr_bytes = bytes(self.session_mgr.store.serialize_cdr(response_msg, self.response_store_type))
+        response_attachment = self._create_response_attachment(key.sequence_id, key.gid)
+        query.reply(
+            zenoh.KeyExpr(self.keyexpr),
+            zenoh.ZBytes(response_cdr_bytes),
+            encoding=Encoding("application/cdr"),
+            attachment=zenoh.ZBytes(response_attachment),
+        )
 
     def _query_handler(self, query: zenoh.Query):
         """Handle incoming service request query"""
-        # Log query details for debugging
+        # Keep logs at debug to avoid spamming in production.
         query_key = str(query.key_expr) if hasattr(query, 'key_expr') else 'unknown'
-        logger.info(f"Service request received! Query keyexpr: {query_key}, Expected: {self.keyexpr}")
+        logger.debug(f"Service request received. Query keyexpr: {query_key}, Expected: {self.keyexpr}")
         try:
-            # Get request payload from query
-            # Following ros-z pattern: query.payload().unwrap().to_bytes()
-            # In Zenoh Python API, payload should be available via query.payload
-            cdr_bytes = None
-            if not hasattr(query, 'payload'):
-                error_msg = "Query object has no 'payload' attribute - invalid Zenoh Query object"
+            # Verified in-container: query.payload is a ZBytes and supports to_bytes().
+            payload = getattr(query, "payload", None)
+            if payload is None or not hasattr(payload, "to_bytes"):
+                error_msg = (
+                    "Service request has unsupported payload shape. Expected query.payload with to_bytes(). "
+                    f"payload_type={type(payload)}"
+                )
                 logger.error(error_msg)
                 query.reply_err(zenoh.ZBytes(error_msg.encode()))
                 return
 
-            payload = query.payload
-            if payload is None:
-                error_msg = "Service request has no payload"
-                logger.error(error_msg)
-                query.reply_err(zenoh.ZBytes(error_msg.encode()))
-                return
-
-            # Extract bytes from payload
-            if isinstance(payload, zenoh.ZBytes):
-                cdr_bytes = bytes(payload)
-            elif isinstance(payload, (bytes, bytearray)):
-                cdr_bytes = bytes(payload)
-            elif hasattr(payload, 'to_bytes'):
-                cdr_bytes = bytes(payload.to_bytes())
-            else:
-                error_msg = f"Unknown payload type: {type(payload)}. Expected zenoh.ZBytes, bytes, or object with to_bytes() method"
-                logger.error(error_msg)
-                query.reply_err(zenoh.ZBytes(error_msg.encode()))
-                return
-
-            if cdr_bytes is None or len(cdr_bytes) == 0:
+            cdr_bytes = payload.to_bytes()
+            if not cdr_bytes:
                 error_msg = "Service request payload is empty"
                 logger.error(error_msg)
                 query.reply_err(zenoh.ZBytes(error_msg.encode()))
@@ -302,68 +351,65 @@ class ROS2ServiceServer:
             # Following ros-z and rmw_zenoh pattern: response attachment includes
             # sequence number and GID from request, plus new timestamp
             # According to rmw_zenoh design, attachment is REQUIRED for service requests
-            if not hasattr(query, 'attachment'):
-                error_msg = "Service request has no attachment attribute - invalid request format"
-                logger.error(error_msg)
-                query.reply_err(zenoh.ZBytes(error_msg.encode()))
-                return
-
-            attachment = query.attachment
-            if attachment is None:
+            attachment = getattr(query, "attachment", None)
+            if attachment is None or not hasattr(attachment, "to_bytes"):
                 error_msg = "Service request attachment is None - attachment is required for service requests"
                 logger.error(error_msg)
                 query.reply_err(zenoh.ZBytes(error_msg.encode()))
                 return
 
-            # Parse attachment
+            # Parse attachment (strict)
             try:
-                attachment_data = self._parse_attachment(bytes(attachment))
+                att = Attachment.from_bytes(attachment.to_bytes())
             except Exception as e:
                 error_msg = f"Failed to parse service request attachment: {e}"
                 logger.error(error_msg, exc_info=True)
                 query.reply_err(zenoh.ZBytes(error_msg.encode()))
                 return
 
-            if attachment_data is None:
-                error_msg = "Service request attachment parsing returned None - invalid attachment format"
-                logger.error(error_msg)
-                query.reply_err(zenoh.ZBytes(error_msg.encode()))
-                return
+            key = ServiceRequestKey(sequence_id=int(att.sequence_id), gid=bytes(att.gid))
 
             # Deserialize request (use store type name which may be converted)
             request_msg = self.session_mgr.store.deserialize_cdr(cdr_bytes, self.request_store_type)
 
-            # Call user callback
+            if self.mode == "queue":
+                # Store query for later response (ros-z style).
+                with self._cv:
+                    if key in self._pending_queries:
+                        query.reply_err(zenoh.ZBytes(b"Duplicate service request key"))
+                        return
+
+                    # Enforce queue depth via QoS (KeepAll => unbounded)
+                    qos_profile = QosProfile.decode(self.qos)
+                    if qos_profile.history_kind != qos_profile.history_kind.KEEP_ALL and qos_profile.history_depth > 0:
+                        while len(self._queue) >= qos_profile.history_depth:
+                            dropped_key, _ = self._queue.popleft()
+                            self._pending_queries.pop(dropped_key, None)
+                            logger.warning(
+                                "Service request queue depth reached; dropping oldest request. "
+                                f"service={self.service_name} depth={qos_profile.history_depth}"
+                            )
+
+                    self._pending_queries[key] = query
+                    self._queue.append((key, request_msg))
+                    self._cv.notify()
+                return
+
+            # callback mode (default): call user callback and reply immediately
             try:
-                response_msg = self.callback(request_msg)
-
+                response_msg = self.callback(request_msg)  # type: ignore[misc]
                 if response_msg is None:
-                    error_msg = "Service callback returned None"
-                    logger.error(error_msg)
-                    query.reply_err(zenoh.ZBytes(error_msg.encode()))
-                    return
+                    raise RuntimeError("Service callback returned None")
 
-                # Serialize response (use store type name which may be converted)
                 response_cdr_bytes = bytes(self.session_mgr.store.serialize_cdr(response_msg, self.response_store_type))
+                response_attachment = self._create_response_attachment(key.sequence_id, key.gid)
 
-                # Create response attachment (following rmw_zenoh design)
-                # Include sequence number and GID from request, plus new timestamp
-                # attachment_data is guaranteed to be valid at this point
-                response_attachment = self._create_response_attachment(
-                    attachment_data["sequence_id"],
-                    attachment_data["gid"]
-                )
-
-                # Send response
-                # Following ros-z pattern: query.reply(&self.key_expr, msg.serialize()).attachment(attachment)
-                # Zenoh Python API: reply(key_expr, payload, *, encoding=None, attachment=None, ...)
                 query.reply(
                     zenoh.KeyExpr(self.keyexpr),
                     zenoh.ZBytes(response_cdr_bytes),
                     encoding=Encoding("application/cdr"),
-                    attachment=zenoh.ZBytes(response_attachment) if response_attachment else None
+                    attachment=zenoh.ZBytes(response_attachment),
                 )
-
             except Exception as e:
                 logger.error(f"Error in service callback: {e}", exc_info=True)
                 query.reply_err(zenoh.ZBytes(f"Service callback error: {str(e)}".encode()))

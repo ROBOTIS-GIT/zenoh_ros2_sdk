@@ -4,6 +4,11 @@
 
 Enable ROS 2 topic publishing and subscribing in pure Python applications. Publishers and subscribers automatically appear in `ros2 topic list` and work seamlessly with existing ROS 2 nodes using rmw_zenoh.
 
+## Documentation
+
+- **Docs (GitHub Pages)**: `https://robotis-git.github.io/zenoh_ros2_sdk/` (once enabled)
+- **API Reference (in this repo)**: `docs/api/`
+
 ## Features
 
 - ✅ **No ROS 2 installation required** - Works with just Python and Zenoh
@@ -240,9 +245,11 @@ pub.close()
 
 For development and testing:
 ```bash
-pip install zenoh-ros2-sdk[dev]
-# or
-pip install pytest>=7.0.0 pytest-cov>=4.0.0 black>=22.0.0 flake8>=4.0.0
+# Not published on PyPI yet:
+# pip install zenoh-ros2-sdk[dev]
+
+# From source:
+pip install -e ".[dev]"
 ```
 
 ## Installation

@@ -44,6 +44,13 @@ dev = [
     "flake8>=4.0.0",
 ]
 
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
+    "pymdown-extensions>=10.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/robotis-git/zenoh_ros2_sdk"
 Repository = "https://github.com/robotis-git/zenoh_ros2_sdk"

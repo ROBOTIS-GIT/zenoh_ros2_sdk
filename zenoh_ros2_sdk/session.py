@@ -1,10 +1,10 @@
 """
 ZenohSession - Manages shared Zenoh session and type store
 """
-import zenoh
+import zenoh  # type: ignore[import-not-found]
 import uuid
 import threading
-from rosbags.typesys import get_types_from_msg, get_typestore, Stores
+from rosbags.typesys import get_types_from_msg, get_typestore, Stores  # type: ignore[import-not-found]
 from .message_registry import get_registry, load_service_type
 from .logger import get_logger
 

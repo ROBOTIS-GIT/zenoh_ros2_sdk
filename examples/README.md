@@ -70,6 +70,30 @@ Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This exam
 python3 examples/08_service_client.py
 ```
 
+### `10_service_server_queue.py`
+Service server queue-mode (ros-z style): `take_request()` / `send_response()` with a correlation key.
+
+**Usage:**
+```bash
+python3 examples/10_service_server_queue.py
+```
+
+### `09_subscribe_compressed_image.py`
+Subscribes to a ZED `sensor_msgs/msg/CompressedImage` stream (useful for verifying camera streams over Zenoh).
+
+**Usage:**
+```bash
+python3 examples/09_subscribe_compressed_image.py
+```
+
+### `09_subscribe_compressed_image_debug.py`
+Same as `09_subscribe_compressed_image.py`, plus prints the internal key expression and type hash for troubleshooting.
+
+**Usage:**
+```bash
+python3 examples/09_subscribe_compressed_image_debug.py
+```
+
 ## Running Examples
 
 Make sure you have:
@@ -78,3 +102,35 @@ Make sure you have:
 3. Set the correct `router_ip` if not using localhost
 
 Each example is self-contained and uses the message registry to automatically load message definitions. You can copy and modify these examples for your own use cases.
+
+## Debugging Pub/Sub Discovery (rmw_zenoh compatibility)
+
+This SDK matches `rmw_zenoh_cpp`/`ros-z` conventions by using:
+
+- **Data-plane key expressions** (payload transport):
+  - `<domain_id>/<fully_qualified_name>/<dds_type_name>/<type_hash>`
+- **Discovery-plane liveliness tokens** (ROS graph / publish-on-subscribe):
+  - `@ros2_lv/<domain_id>/<session_id>/<node_id>/<entity_id>/<kind>/.../<qos>`
+
+Entity kinds:
+- `NN`: node
+- `MP`: message publisher
+- `MS`: message subscriber
+- `SS`: service server
+- `SC`: service client
+
+If ROS tools can see a topic but you receive no data, confirm there is an `MS` token for that topic. Some publishers (notably camera/image pipelines) only start producing data after they discover at least one subscriber.
+
+## QoS (rmw_zenoh / ros-z format)
+
+This SDK uses the same compact QoS encoding as `rmw_zenoh_cpp` / `ros-z` for liveliness tokens:
+
+`<Reliability>:<Durability>:<HistoryKind,HistoryDepth>:<DeadlineSec,DeadlineNSec>:<LifespanSec,LifespanNSec>:<LivelinessKind,LivelinessSec,LivelinessNSec>`
+
+Examples:
+
+- Default (KeepLast depth 10, reliable, volatile): `::,10:,:,:,,"`
+
+You can pass either:
+- the **encoded string** via `qos="::,10:,:,:,,"`, or
+- a `QosProfile` object from `zenoh_ros2_sdk.qos`.

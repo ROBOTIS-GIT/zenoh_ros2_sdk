@@ -172,18 +172,32 @@ class TestROS2ServiceServer:
             )
 
     def test_service_server_callback_required(self):
-        """Test that callback is required"""
+        """Test that callback is required when mode='callback' (default)"""
         # Reset singleton for clean test
         ZenohSession._instance = None
 
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="callback must be provided"):
             ROS2ServiceServer(
                 service_name="/add_two_ints",
                 srv_type="example_interfaces/srv/AddTwoInts",
                 domain_id=0
-                # Missing callback
+                # Missing callback (default mode is 'callback')
             )
+
+    def test_service_server_queue_mode_allows_no_callback(self):
+        """Test that queue mode allows callback=None"""
+        ZenohSession._instance = None
+
+        server = ROS2ServiceServer(
+            service_name="/add_two_ints",
+            srv_type="example_interfaces/srv/AddTwoInts",
+            callback=None,
+            domain_id=0,
+            mode="queue",
+        )
+        assert server.mode == "queue"
+        server.close()
 
     def test_service_server_shared_session(self):
         """Test that multiple service servers share the same session"""

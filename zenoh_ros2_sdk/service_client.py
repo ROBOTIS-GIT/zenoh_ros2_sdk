@@ -1,16 +1,20 @@
 """
 ROS2ServiceClient - ROS2 Service Client using Zenoh
 """
-import zenoh
-from zenoh import Encoding
+import zenoh  # type: ignore[import-not-found]
+from zenoh import Encoding  # type: ignore[import-not-found]
 import time
 import struct
 import uuid
 import threading
-from typing import Optional, Callable
+from typing import Any, Callable, Optional
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, compute_service_type_hash, mangle_name, load_dependencies_recursive
+from .utils import ros2_to_dds_type, compute_service_type_hash, load_dependencies_recursive
+from .entity import EntityKind, NodeEntity, EndpointEntity
+from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
+from .qos import QosProfile, DEFAULT_QOS_PROFILE
+from .attachment import Attachment
 from .message_registry import get_registry
 from .logger import get_logger
 
@@ -32,10 +36,15 @@ class ROS2ServiceClient:
         router_ip: str = "127.0.0.1",
         router_port: int = 7447,
         type_hash: Optional[str] = None,
-        timeout: float = 10.0
+        timeout: float = 10.0,
+        qos: Optional[object] = None,
     ):
         """
-        Create a ROS2 service client
+        Create a ROS2 service client.
+
+        This client sends requests using Zenoh queries and expects:
+        - `Reply.ok` to be a Zenoh `Sample` with `.payload.to_bytes()`
+        - `Reply.err` to be a Zenoh `ReplyError` with `.payload.to_bytes()`
 
         Args:
             service_name: ROS2 service name (e.g., "/add_two_ints")
@@ -49,6 +58,12 @@ class ROS2ServiceClient:
             router_port: Zenoh router port
             type_hash: Service type hash (auto-detected if None)
             timeout: Timeout for service calls in seconds (default: 10.0)
+            qos: QoS used for liveliness discovery tokens.
+                Accepts `QosProfile`, an encoded rmw_zenoh QoS string, or `None` for default.
+
+        Raises:
+            ValueError: If `srv_type` format is invalid.
+            RuntimeError: If service definitions cannot be loaded to compute the type hash.
         """
         self.service_name = service_name
         self.srv_type = srv_type
@@ -56,6 +71,7 @@ class ROS2ServiceClient:
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_service_client_{uuid.uuid4().hex[:8]}"
         self.timeout = timeout
+        _, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
 
         # Get or create shared session
         self.session_mgr = ZenohSession.get_instance(router_ip, router_port)
@@ -179,8 +195,7 @@ class ROS2ServiceClient:
 
         # Build keyexpr for service (used for queries)
         # Format: domain_id/service_name/dds_type_name/type_hash
-        fully_qualified_name = service_name.lstrip("/")
-        self.keyexpr = f"{domain_id}/{fully_qualified_name}/{self.dds_type_name}/{type_hash}"
+        self.keyexpr = topic_keyexpr(domain_id, service_name, self.dds_type_name, type_hash)
 
         # Declare liveliness tokens
         self._declare_liveliness_tokens()
@@ -201,40 +216,49 @@ class ROS2ServiceClient:
         self._lock = threading.Lock()
         self._closed = False
 
+    @staticmethod
+    def _normalize_qos(
+        qos: Optional[object],
+        *,
+        default: QosProfile,
+        fallback: str,
+    ) -> tuple[QosProfile, str]:
+        if qos is None:
+            return default, fallback
+        if isinstance(qos, QosProfile):
+            return qos, qos.encode()
+        if isinstance(qos, str):
+            return QosProfile.decode(qos), qos
+        return default, fallback
+
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""
-        mangled_enclave = "%"
-        mangled_namespace = mangle_name(self.namespace)
-        mangled_service = mangle_name(self.service_name)
-        qos = "::,7:,:,:,,"  # Default QoS
-
-        # Node token
-        node_token_keyexpr = (
-            f"@ros2_lv/{self.domain_id}/{self.session_mgr.session_id}/"
-            f"{self.node_id}/{self.node_id}/NN/{mangled_enclave}/"
-            f"{mangled_namespace}/{self.node_name}"
+        node = NodeEntity(
+            domain_id=self.domain_id,
+            session_id=self.session_mgr.session_id,
+            node_id=self.node_id,
+            node_name=self.node_name,
+            namespace=self.namespace,
+        )
+        ep = EndpointEntity(
+            node=node,
+            entity_id=self.entity_id,
+            kind=EntityKind.CLIENT,
+            name=self.service_name,
+            dds_type_name=self.dds_type_name,
+            type_hash=self.type_hash,
+            qos=self.qos,
+            gid=self.client_gid,
         )
 
-        # Client token (SC = Service Client, not MC)
-        client_token_keyexpr = (
-            f"@ros2_lv/{self.domain_id}/{self.session_mgr.session_id}/"
-            f"{self.node_id}/{self.entity_id}/SC/{mangled_enclave}/"
-            f"{mangled_namespace}/{self.node_name}/{mangled_service}/"
-            f"{self.dds_type_name}/{self.type_hash}/{qos}"
-        )
-
-        self.node_token = self.session_mgr.liveliness.declare_token(node_token_keyexpr)
-        self.client_token = self.session_mgr.liveliness.declare_token(client_token_keyexpr)
+        self.node_token = self.session_mgr.liveliness.declare_token(node_liveliness_keyexpr(node))
+        self.client_token = self.session_mgr.liveliness.declare_token(endpoint_liveliness_keyexpr(ep))
 
     def _create_attachment(self, seq_num: int, timestamp_ns: int) -> bytes:
         """Create rmw_zenoh attachment for service request"""
-        attachment = struct.pack('<Q', seq_num)  # sequence number
-        attachment += struct.pack('<Q', timestamp_ns)  # timestamp
-        attachment += struct.pack('B', len(self.client_gid))  # GID length
-        attachment += self.client_gid  # GID
-        return attachment
+        return Attachment(sequence_id=seq_num, timestamp_ns=timestamp_ns, gid=self.client_gid).to_bytes()
 
-    def call(self, **kwargs) -> Optional[object]:
+    def call(self, **kwargs: Any) -> Optional[object]:
         """
         Call the service synchronously
 
@@ -263,44 +287,32 @@ class ROS2ServiceClient:
         def reply_callback(reply: zenoh.Reply):
             """Callback for receiving service response"""
             try:
-                # Zenoh Python API: Reply has 'ok' and 'err' properties
+                # Verified in-container:
+                # - reply.ok is a builtins.Sample, with ok.payload: ZBytes
+                # - reply.err is a builtins.ReplyError, with err.payload: ZBytes
                 if reply.err is not None:
-                    # Error response
-                    error_payload = reply.err
-                    # Handle ZBytes directly
-                    if isinstance(error_payload, zenoh.ZBytes):
-                        error_bytes = bytes(error_payload)
-                    elif hasattr(error_payload, 'get_payload'):
-                        error_bytes = bytes(error_payload.get_payload())
-                    elif hasattr(error_payload, 'payload'):
-                        error_bytes = bytes(error_payload.payload)
-                    elif isinstance(error_payload, (bytes, bytearray)):
-                        error_bytes = bytes(error_payload)
-                    else:
-                        error_bytes = str(error_payload).encode()
-                    error_msg = error_bytes.decode('utf-8', errors='ignore')
+                    err = reply.err
+                    payload = getattr(err, "payload", None)
+                    if payload is None or not hasattr(payload, "to_bytes"):
+                        raise TypeError(
+                            "Unexpected ReplyError shape. Expected err.payload with to_bytes(). "
+                            f"err_type={type(err)} payload_type={type(payload)}"
+                        )
+                    error_msg = payload.to_bytes().decode("utf-8", errors="ignore")
                     logger.error(f"Service call failed: {error_msg}")
                     response_data["error"] = error_msg
                     response_event.set()
                     return
 
                 if reply.ok is not None:
-                    # Success response
-                    ok_payload = reply.ok
-                    # Handle ZBytes directly
-                    if isinstance(ok_payload, zenoh.ZBytes):
-                        cdr_bytes = bytes(ok_payload)
-                    elif hasattr(ok_payload, 'get_payload'):
-                        cdr_bytes = bytes(ok_payload.get_payload())
-                    elif hasattr(ok_payload, 'payload'):
-                        cdr_bytes = bytes(ok_payload.payload)
-                    elif isinstance(ok_payload, (bytes, bytearray)):
-                        cdr_bytes = bytes(ok_payload)
-                    else:
-                        logger.error(f"Unknown reply.ok type: {type(ok_payload)}")
-                        response_data["error"] = f"Unknown reply payload type: {type(ok_payload)}"
-                        response_event.set()
-                        return
+                    ok = reply.ok
+                    payload = getattr(ok, "payload", None)
+                    if payload is None or not hasattr(payload, "to_bytes"):
+                        raise TypeError(
+                            "Unexpected Reply ok shape. Expected ok.payload with to_bytes(). "
+                            f"ok_type={type(ok)} payload_type={type(payload)}"
+                        )
+                    cdr_bytes = payload.to_bytes()
 
                     # Deserialize response (use store type name which may be converted)
                     response_msg = self.session_mgr.store.deserialize_cdr(cdr_bytes, self.response_store_type)
@@ -338,7 +350,7 @@ class ROS2ServiceClient:
             logger.warning(f"Service call timed out after {self.timeout} seconds")
             return None
 
-    def call_async(self, callback: Callable, **kwargs):
+    def call_async(self, callback: Callable, **kwargs: Any) -> None:
         """
         Call the service asynchronously
 
@@ -361,42 +373,28 @@ class ROS2ServiceClient:
         def reply_callback(reply: zenoh.Reply):
             """Callback for receiving service response"""
             try:
-                # Zenoh Python API: Reply has 'ok' and 'err' properties
                 if reply.err is not None:
-                    # Error response
-                    error_payload = reply.err
-                    # Handle ZBytes directly
-                    if isinstance(error_payload, zenoh.ZBytes):
-                        error_bytes = bytes(error_payload)
-                    elif hasattr(error_payload, 'get_payload'):
-                        error_bytes = bytes(error_payload.get_payload())
-                    elif hasattr(error_payload, 'payload'):
-                        error_bytes = bytes(error_payload.payload)
-                    elif isinstance(error_payload, (bytes, bytearray)):
-                        error_bytes = bytes(error_payload)
-                    else:
-                        error_bytes = str(error_payload).encode()
-                    error_msg = error_bytes.decode('utf-8', errors='ignore')
+                    err = reply.err
+                    payload = getattr(err, "payload", None)
+                    if payload is None or not hasattr(payload, "to_bytes"):
+                        raise TypeError(
+                            "Unexpected ReplyError shape. Expected err.payload with to_bytes(). "
+                            f"err_type={type(err)} payload_type={type(payload)}"
+                        )
+                    error_msg = payload.to_bytes().decode("utf-8", errors="ignore")
                     logger.error(f"Async service call failed: {error_msg}")
                     callback(None)
                     return
 
                 if reply.ok is not None:
-                    # Success response
-                    ok_payload = reply.ok
-                    # Handle ZBytes directly
-                    if isinstance(ok_payload, zenoh.ZBytes):
-                        cdr_bytes = bytes(ok_payload)
-                    elif hasattr(ok_payload, 'get_payload'):
-                        cdr_bytes = bytes(ok_payload.get_payload())
-                    elif hasattr(ok_payload, 'payload'):
-                        cdr_bytes = bytes(ok_payload.payload)
-                    elif isinstance(ok_payload, (bytes, bytearray)):
-                        cdr_bytes = bytes(ok_payload)
-                    else:
-                        logger.error(f"Unknown reply.ok type: {type(ok_payload)}")
-                        callback(None)
-                        return
+                    ok = reply.ok
+                    payload = getattr(ok, "payload", None)
+                    if payload is None or not hasattr(payload, "to_bytes"):
+                        raise TypeError(
+                            "Unexpected Reply ok shape. Expected ok.payload with to_bytes(). "
+                            f"ok_type={type(ok)} payload_type={type(payload)}"
+                        )
+                    cdr_bytes = payload.to_bytes()
 
                     # Deserialize response (use store type name which may be converted)
                     response_msg = self.session_mgr.store.deserialize_cdr(cdr_bytes, self.response_store_type)

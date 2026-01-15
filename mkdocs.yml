@@ -1,0 +1,56 @@
+site_name: zenoh_ros2_sdk
+site_description: Python SDK for ROS 2 communication via Zenoh
+repo_url: https://github.com/robotis-git/zenoh_ros2_sdk
+repo_name: robotis-git/zenoh_ros2_sdk
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_signature_annotations: true
+            members_order: source
+            filters:
+              - "!^_"
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts: concepts.md
+  - Examples: examples.md
+  - API Reference:
+      - Overview: api/index.md
+      - Core:
+          - entity: api/entity.md
+          - keyexpr: api/keyexpr.md
+          - qos: api/qos.md
+          - attachment: api/attachment.md
+      - High-level:
+          - publisher: api/publisher.md
+          - subscriber: api/subscriber.md
+          - service_client: api/service_client.md
+          - service_server: api/service_server.md
+          - session: api/session.md
+          - message_registry: api/message_registry.md
+  - Contributing:
+      - Overview: contributing/index.md
+      - Docs: contributing/docs.md
+      - Docstrings: contributing/docstrings.md

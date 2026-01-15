@@ -3,7 +3,7 @@ Message Registry - Loads and manages ROS2 message definitions from .msg files
 """
 import os
 from pathlib import Path
-from typing import Optional, Set
+from typing import Any, Optional, Set, Type
 
 from ._cache import (
     get_repository_for_package,
@@ -383,7 +383,7 @@ class MessageRegistry:
             logger.warning(f"Failed to load message type {msg_type}: {e}")
             return False
 
-    def get_message_class(self, msg_type: str):
+    def get_message_class(self, msg_type: str) -> Optional[Type[Any]]:
         """
         Get a message class for a given type (loads if not already loaded)
 
@@ -391,11 +391,25 @@ class MessageRegistry:
             msg_type: ROS2 message type
 
         Returns:
-            Message class or None if not found
+            Optional[Type[Any]]: Message class or None if not found
         """
         if msg_type not in self._loaded_types:
-            if not self.load_message_type(msg_type):
-                return None
+            # Service request/response types cannot be loaded from a single .msg file path.
+            # They must be loaded from the parent .srv file.
+            is_service_req_resp = (
+                "/srv/" in msg_type and (msg_type.endswith("_Request") or msg_type.endswith("_Response"))
+            )
+            if is_service_req_resp:
+                # example_interfaces/srv/AddTwoInts_Request -> example_interfaces/srv/AddTwoInts
+                if msg_type.endswith("_Request"):
+                    base_srv = msg_type[:-8]
+                else:
+                    base_srv = msg_type[:-9]
+                if not self.load_service_type(base_srv):
+                    return None
+            else:
+                if not self.load_message_type(msg_type):
+                    return None
 
         # Check if we have a mapping to the actual store key (for service types)
         actual_key = self.session._registered_types.get(msg_type)
@@ -447,7 +461,7 @@ def load_message_type(msg_type: str, messages_dir: Optional[str] = None) -> bool
     return registry.load_message_type(msg_type)
 
 
-def get_message_class(msg_type: str, messages_dir: Optional[str] = None):
+def get_message_class(msg_type: str, messages_dir: Optional[str] = None) -> Optional[Type[Any]]:
     """
     Convenience function to get a message class
 
@@ -456,7 +470,7 @@ def get_message_class(msg_type: str, messages_dir: Optional[str] = None):
         messages_dir: Optional custom messages directory
 
     Returns:
-        Message class or None
+        Optional[Type[Any]]: Message class or None
     """
     registry = get_registry(messages_dir)
     return registry.get_message_class(msg_type)
