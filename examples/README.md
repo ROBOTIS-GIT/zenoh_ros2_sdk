@@ -92,7 +92,7 @@ python3 examples/10_service_server_queue.py
 
 Make sure you have:
 1. Zenoh router (`zenohd`) running
-2. Set the correct `domain_id` in the example (default is 30)
+2. Set `ROS_DOMAIN_ID` if your ROS 2 domain is not 0
 3. Set the correct `router_ip` if not using localhost
 
 Each example is self-contained and uses the message registry to automatically load message definitions. You can copy and modify these examples for your own use cases.

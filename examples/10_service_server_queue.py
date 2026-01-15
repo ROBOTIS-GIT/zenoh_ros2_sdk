@@ -25,8 +25,7 @@ def main():
         service_name="/add_two_ints",
         srv_type="example_interfaces/srv/AddTwoInts",
         callback=None,
-        domain_id=30,
-        mode="queue",
+        mode="queue"
     )
 
     Response = get_message_class("example_interfaces/srv/AddTwoInts_Response")

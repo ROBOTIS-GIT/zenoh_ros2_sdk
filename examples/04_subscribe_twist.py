@@ -25,8 +25,7 @@ def main():
     sub = ROS2Subscriber(
         topic="/cmd_vel",
         msg_type="geometry_msgs/msg/Twist",
-        callback=on_message,
-        domain_id=30
+        callback=on_message
     )
 
     try:

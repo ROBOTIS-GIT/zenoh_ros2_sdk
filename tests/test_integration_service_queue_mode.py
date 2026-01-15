@@ -15,8 +15,6 @@ def test_service_queue_mode_end_to_end():
     service_name = f"/add_two_ints_{uuid.uuid4().hex[:8]}"
     srv_type = "example_interfaces/srv/AddTwoInts"
 
-    Response = get_message_class("example_interfaces/srv/AddTwoInts_Response")
-
     server = ROS2ServiceServer(
         service_name=service_name,
         srv_type=srv_type,
@@ -24,6 +22,8 @@ def test_service_queue_mode_end_to_end():
         domain_id=0,
         mode="queue",
     )
+    Response = server.response_msg_class
+    assert Response is not None
 
     # Run server loop in background: take request and send response.
     def server_loop():

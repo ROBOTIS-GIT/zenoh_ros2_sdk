@@ -8,7 +8,7 @@ import uuid
 from typing import Any, Optional
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, get_type_hash, load_dependencies_recursive
+from .utils import ros2_to_dds_type, get_type_hash, load_dependencies_recursive, resolve_domain_id
 from .entity import EntityKind, NodeEntity, EndpointEntity
 from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
 from .qos import QosProfile, QosReliability, QosDurability, DEFAULT_QOS_PROFILE
@@ -34,7 +34,7 @@ class ROS2Publisher:
         msg_definition: str = "",
         node_name: Optional[str] = None,
         namespace: str = "/",
-        domain_id: int = 0,
+        domain_id: Optional[int] = None,
         router_ip: str = "127.0.0.1",
         router_port: int = 7447,
         type_hash: Optional[str] = None,
@@ -50,7 +50,7 @@ class ROS2Publisher:
             msg_definition: Message definition text (empty string to auto-load from registry)
             node_name: Node name (auto-generated if None)
             namespace: Node namespace
-            domain_id: ROS domain ID
+            domain_id: ROS domain ID (defaults to ROS_DOMAIN_ID or 0)
             router_ip: Zenoh router IP
             router_port: Zenoh router port
             type_hash: Message type hash (auto-detected if None)
@@ -65,7 +65,7 @@ class ROS2Publisher:
         """
         self.topic = topic
         self.msg_type = msg_type
-        self.domain_id = domain_id
+        self.domain_id = resolve_domain_id(domain_id)
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_publisher_{uuid.uuid4().hex[:8]}"
         self.strict_zenoh_qos = strict_zenoh_qos
@@ -127,7 +127,7 @@ class ROS2Publisher:
         self.entity_id = self.session_mgr.get_next_entity_id()
 
         # Build keyexpr
-        self.keyexpr = topic_keyexpr(domain_id, topic, self.dds_type_name, type_hash)
+        self.keyexpr = topic_keyexpr(self.domain_id, topic, self.dds_type_name, type_hash)
 
         # Declare liveliness tokens
         self._declare_liveliness_tokens()

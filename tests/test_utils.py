@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from zenoh_ros2_sdk.utils import (
     ros2_to_dds_type, get_type_hash, mangle_name, compute_type_hash_from_msg,
-    compute_service_type_hash
+    compute_service_type_hash, resolve_domain_id
 )
 from zenoh_ros2_sdk.message_registry import get_registry
 
@@ -33,6 +33,31 @@ class TestRos2ToDdsType:
         """Test handling of invalid format"""
         result = ros2_to_dds_type("invalid")
         assert result == "invalid"
+
+
+class TestResolveDomainId:
+    """Tests for resolving ROS domain ID from env/explicit values"""
+
+    def test_env_default(self, monkeypatch):
+        """Use default 0 when ROS_DOMAIN_ID is not set"""
+        monkeypatch.delenv("ROS_DOMAIN_ID", raising=False)
+        assert resolve_domain_id(None) == 0
+
+    def test_env_value(self, monkeypatch):
+        """Use ROS_DOMAIN_ID when explicit value is not provided"""
+        monkeypatch.setenv("ROS_DOMAIN_ID", "30")
+        assert resolve_domain_id(None) == 30
+
+    def test_explicit_overrides_env(self, monkeypatch):
+        """Explicit domain_id overrides ROS_DOMAIN_ID"""
+        monkeypatch.setenv("ROS_DOMAIN_ID", "22")
+        assert resolve_domain_id(5) == 5
+
+    def test_invalid_env_raises(self, monkeypatch):
+        """Invalid ROS_DOMAIN_ID raises ValueError"""
+        monkeypatch.setenv("ROS_DOMAIN_ID", "abc")
+        with pytest.raises(ValueError, match="Invalid ROS_DOMAIN_ID"):
+            resolve_domain_id(None)
 
 
 class TestGetTypeHash:

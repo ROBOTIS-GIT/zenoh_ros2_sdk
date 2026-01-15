@@ -41,8 +41,7 @@ def main():
     server = ROS2ServiceServer(
         service_name="/add_two_ints",
         srv_type="example_interfaces/srv/AddTwoInts",
-        callback=add_two_ints_handler,
-        domain_id=30
+        callback=add_two_ints_handler
     )
 
     print("Service server is running. Waiting for requests...")

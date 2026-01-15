@@ -38,8 +38,7 @@ from zenoh_ros2_sdk import ROS2Publisher
 # Create publisher - msg_definition is optional, auto-loads from registry
 pub = ROS2Publisher(
     topic="/chatter",
-    msg_type="std_msgs/msg/String",
-    domain_id=30
+    msg_type="std_msgs/msg/String"
 )
 
 # Publish messages
@@ -62,8 +61,7 @@ def on_message(msg):
 sub = ROS2Subscriber(
     topic="/chatter",
     msg_type="std_msgs/msg/String",
-    callback=on_message,
-    domain_id=30
+    callback=on_message
 )
 
 # Keep running
@@ -89,8 +87,7 @@ def service_handler(request):
 server = ROS2ServiceServer(
     service_name="/add_two_ints",
     srv_type="example_interfaces/srv/AddTwoInts",
-    callback=service_handler,
-    domain_id=30
+    callback=service_handler
 )
 
 # Keep running
@@ -109,8 +106,7 @@ from zenoh_ros2_sdk import ROS2ServiceClient
 # Create service client
 client = ROS2ServiceClient(
     service_name="/add_two_ints",
-    srv_type="example_interfaces/srv/AddTwoInts",
-    domain_id=30
+    srv_type="example_interfaces/srv/AddTwoInts"
 )
 
 # Make synchronous service call
@@ -201,8 +197,7 @@ Twist = get_message_class("geometry_msgs/msg/Twist")
 # Create publisher - message type is automatically loaded
 pub = ROS2Publisher(
     topic="/cmd_vel",
-    msg_type="geometry_msgs/msg/Twist",
-    domain_id=30
+    msg_type="geometry_msgs/msg/Twist"
 )
 
 # Create message objects
@@ -223,8 +218,7 @@ from zenoh_ros2_sdk import ROS2Publisher
 pub = ROS2Publisher(
     topic="/counter",
     msg_type="std_msgs/msg/Int32",
-    msg_definition="int32 data\n",
-    domain_id=30
+    msg_definition="int32 data\n"
 )
 
 pub.publish(data=42)
@@ -235,7 +229,7 @@ pub.close()
 
 ### Parameters
 
-- `domain_id`: ROS domain ID (default: 0)
+- `domain_id`: ROS domain ID (defaults to `ROS_DOMAIN_ID` or 0)
 - `router_ip`: Zenoh router IP address
 - `router_port`: Zenoh router port
 - `node_name`: Custom node name (auto-generated if not provided)
@@ -253,6 +247,16 @@ export ZENOH_CONFIG_OVERRIDE='transport/shared_memory/enabled=true;mode="client"
 
 Notes:
 - Values are parsed as **JSON5**. If the value is a string, it must be quoted (e.g., `mode="client"`).
+
+### ROS domain ID via environment
+
+If you do not pass `domain_id` to the constructor, the SDK uses `ROS_DOMAIN_ID` from
+the environment (falling back to 0 when it is not set). An explicit `domain_id`
+argument always overrides the environment value.
+
+```bash
+export ROS_DOMAIN_ID=30
+```
 
 ## Requirements
 
@@ -287,13 +291,6 @@ pip install zenoh-ros2-sdk
 git clone https://github.com/robotis-git/zenoh_ros2_sdk.git
 cd zenoh_ros2_sdk
 pip install -e .
-```
-
-### Install dependencies separately
-
-If installing from source, you can install dependencies separately:
-```bash
-pip install eclipse-zenoh>=0.10.0 rosbags>=0.11.0 GitPython>=3.1.18 tqdm>=4.64.0
 ```
 
 ## Running Examples

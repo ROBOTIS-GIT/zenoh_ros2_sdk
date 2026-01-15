@@ -25,8 +25,7 @@ def main():
     # Create publisher
     pub = ROS2Publisher(
         topic="/cmd_vel",
-        msg_type="geometry_msgs/msg/Twist",
-        domain_id=30
+        msg_type="geometry_msgs/msg/Twist"
     )
 
     try:

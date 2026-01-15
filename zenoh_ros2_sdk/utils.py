@@ -3,6 +3,7 @@ Utility functions for type conversion and message handling
 """
 import hashlib
 import json
+import os
 import re
 from copy import deepcopy
 from typing import Dict, List, Optional, Set
@@ -152,6 +153,21 @@ PRIMITIVE_TO_FIELD_TYPE = {
     'byte': 'FIELD_TYPE_BYTE',
     'octet': 'FIELD_TYPE_BYTE',
 }
+
+
+def resolve_domain_id(domain_id: Optional[int]) -> int:
+    """Resolve ROS domain ID from explicit value or ROS_DOMAIN_ID env var."""
+    if domain_id is not None:
+        return domain_id
+
+    env_value = os.environ.get("ROS_DOMAIN_ID", "").strip()
+    if not env_value:
+        return 0
+
+    try:
+        return int(env_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid ROS_DOMAIN_ID value: {env_value!r}") from exc
 
 
 def ros2_to_dds_type(ros2_type: str) -> str:

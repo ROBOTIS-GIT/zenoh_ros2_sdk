@@ -33,8 +33,7 @@ from zenoh_ros2_sdk import ROS2Publisher
 
 pub = ROS2Publisher(
     topic="/chatter",
-    msg_type="std_msgs/msg/String",
-    domain_id=30,
+    msg_type="std_msgs/msg/String"
 )
 pub.publish(data="Hello World!")
 pub.close()
@@ -51,8 +50,7 @@ def on_message(msg):
 sub = ROS2Subscriber(
     topic="/chatter",
     msg_type="std_msgs/msg/String",
-    callback=on_message,
-    domain_id=30,
+    callback=on_message
 )
 ```
 
@@ -68,8 +66,7 @@ def handler(request):
 server = ROS2ServiceServer(
     service_name="/add_two_ints",
     srv_type="example_interfaces/srv/AddTwoInts",
-    callback=handler,
-    domain_id=30,
+    callback=handler
 )
 ```
 
@@ -80,8 +77,7 @@ from zenoh_ros2_sdk import ROS2ServiceClient
 
 client = ROS2ServiceClient(
     service_name="/add_two_ints",
-    srv_type="example_interfaces/srv/AddTwoInts",
-    domain_id=30,
+    srv_type="example_interfaces/srv/AddTwoInts"
 )
 
 resp = client.call(a=5, b=3)

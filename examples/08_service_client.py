@@ -18,7 +18,6 @@ def main():
     client = ROS2ServiceClient(
         service_name="/add_two_ints",
         srv_type="example_interfaces/srv/AddTwoInts",
-        domain_id=30,
         timeout=5.0
     )
 
