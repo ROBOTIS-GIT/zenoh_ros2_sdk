@@ -23,6 +23,12 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 
 ## Quick Start
 
+### Install
+
+```bash
+pip install zenoh-ros2-sdk
+```
+
 ### Simple Publisher
 
 ```python
@@ -260,14 +266,20 @@ Notes:
 
 For development and testing:
 ```bash
-# Not published on PyPI yet:
-# pip install zenoh-ros2-sdk[dev]
+# From PyPI:
+pip install "zenoh-ros2-sdk[dev]"
 
 # From source:
 pip install -e ".[dev]"
 ```
 
 ## Installation
+
+### From PyPI
+
+```bash
+pip install zenoh-ros2-sdk
+```
 
 ### From source
 
