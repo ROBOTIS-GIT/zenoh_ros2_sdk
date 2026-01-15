@@ -37,6 +37,9 @@ ENV/
 .coverage
 htmlcov/
 
+# MkDocs output
+site/
+
 # OS
 .DS_Store
 Thumbs.db
