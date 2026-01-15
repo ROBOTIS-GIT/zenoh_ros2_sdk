@@ -6,7 +6,7 @@ Examples are numbered in a recommended learning order, starting with simple case
 
 ## Available Examples
 
-### `01_publish_string.py`
+### [`01_publish_string.py`](01_publish_string.py)
 Publishes String messages to a ROS2 topic. Demonstrates the basic publisher pattern with automatic message type loading.
 
 **Usage:**
@@ -14,7 +14,7 @@ Publishes String messages to a ROS2 topic. Demonstrates the basic publisher patt
 python3 examples/01_publish_string.py
 ```
 
-### `02_subscribe_string.py`
+### [`02_subscribe_string.py`](02_subscribe_string.py)
 Subscribes to a ROS2 topic and receives String messages. Demonstrates the basic subscriber pattern with automatic message type loading.
 
 **Usage:**
@@ -22,7 +22,7 @@ Subscribes to a ROS2 topic and receives String messages. Demonstrates the basic 
 python3 examples/02_subscribe_string.py
 ```
 
-### `03_publish_twist.py`
+### [`03_publish_twist.py`](03_publish_twist.py)
 Demonstrates how to publish `geometry_msgs/msg/Twist` messages, commonly used for velocity commands in robotics. Shows how to work with nested message types (Vector3).
 
 **Usage:**
@@ -30,7 +30,7 @@ Demonstrates how to publish `geometry_msgs/msg/Twist` messages, commonly used fo
 python3 examples/03_publish_twist.py
 ```
 
-### `04_subscribe_twist.py`
+### [`04_subscribe_twist.py`](04_subscribe_twist.py)
 Demonstrates how to subscribe to `geometry_msgs/msg/Twist` messages and access nested message fields.
 
 **Usage:**
@@ -38,7 +38,7 @@ Demonstrates how to subscribe to `geometry_msgs/msg/Twist` messages and access n
 python3 examples/04_subscribe_twist.py
 ```
 
-### `05_publish_joint_state.py`
+### [`05_publish_joint_state.py`](05_publish_joint_state.py)
 Demonstrates how to publish `sensor_msgs/msg/JointState` messages, commonly used to report robot joint states (position, velocity, effort). Shows how to work with nested message types (Header, Time) and array fields.
 
 **Usage:**
@@ -46,7 +46,7 @@ Demonstrates how to publish `sensor_msgs/msg/JointState` messages, commonly used
 python3 examples/05_publish_joint_state.py
 ```
 
-### `06_subscribe_joint_state.py`
+### [`06_subscribe_joint_state.py`](06_subscribe_joint_state.py)
 Demonstrates how to subscribe to `sensor_msgs/msg/JointState` messages and access joint state information including joint names, positions, velocities, and efforts.
 
 **Usage:**
@@ -54,7 +54,7 @@ Demonstrates how to subscribe to `sensor_msgs/msg/JointState` messages and acces
 python3 examples/06_subscribe_joint_state.py
 ```
 
-### `07_service_server.py`
+### [`07_service_server.py`](07_service_server.py)
 Demonstrates how to create a ROS2 service server using zenoh_ros2_sdk. This example creates an AddTwoInts service server that adds two integers. Shows automatic service type loading.
 
 **Usage:**
@@ -62,7 +62,7 @@ Demonstrates how to create a ROS2 service server using zenoh_ros2_sdk. This exam
 python3 examples/07_service_server.py
 ```
 
-### `08_service_client.py`
+### [`08_service_client.py`](08_service_client.py)
 Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This example creates an AddTwoInts service client and makes both synchronous and asynchronous service calls. Shows automatic service type loading.
 
 **Usage:**
@@ -70,7 +70,7 @@ Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This exam
 python3 examples/08_service_client.py
 ```
 
-### `09_subscribe_compressed_image.py`
+### [`09_subscribe_compressed_image.py`](09_subscribe_compressed_image.py)
 Demonstrates how to subscribe to `sensor_msgs/msg/CompressedImage` messages (camera stream example; ZED topic by default).
 
 **Usage:**
@@ -80,7 +80,7 @@ python3 examples/09_subscribe_compressed_image.py
 
 Note: this example uses a ZED topic and a non-local `router_ip` by default. Edit the script to match your setup.
 
-### `10_service_server_queue.py`
+### [`10_service_server_queue.py`](10_service_server_queue.py)
 Demonstrates a service server in queue mode (ros-z style): `take_request()` / `send_response()` with a correlation key.
 
 **Usage:**

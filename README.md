@@ -165,16 +165,16 @@ client.close()
 
 See the [`examples/`](examples/) folder (and [`examples/README.md`](examples/README.md)) for self-contained example scripts (numbered in recommended learning order):
 
-- `01_publish_string.py` - Basic publisher example with String messages
-- `02_subscribe_string.py` - Basic subscriber example with String messages
-- `03_publish_twist.py` - Publishing Twist messages (nested types)
-- `04_subscribe_twist.py` - Subscribing to Twist messages (nested types)
-- `05_publish_joint_state.py` - Publishing JointState messages (arrays and nested types)
-- `06_subscribe_joint_state.py` - Subscribing to JointState messages (arrays and nested types)
-- `07_service_server.py` - Service server example (AddTwoInts service)
-- `08_service_client.py` - Service client example (synchronous and asynchronous calls)
-- `09_subscribe_compressed_image.py` - Subscribe to CompressedImage messages (camera stream example; ZED topic by default)
-- `10_service_server_queue.py` - Service server example (queue mode; ros-z style: `take_request()` / `send_response()`)
+- [`01_publish_string.py`](examples/01_publish_string.py) - Basic publisher example with String messages
+- [`02_subscribe_string.py`](examples/02_subscribe_string.py) - Basic subscriber example with String messages
+- [`03_publish_twist.py`](examples/03_publish_twist.py) - Publishing Twist messages (nested types)
+- [`04_subscribe_twist.py`](examples/04_subscribe_twist.py) - Subscribing to Twist messages (nested types)
+- [`05_publish_joint_state.py`](examples/05_publish_joint_state.py) - Publishing JointState messages (arrays and nested types)
+- [`06_subscribe_joint_state.py`](examples/06_subscribe_joint_state.py) - Subscribing to JointState messages (arrays and nested types)
+- [`07_service_server.py`](examples/07_service_server.py) - Service server example (AddTwoInts service)
+- [`08_service_client.py`](examples/08_service_client.py) - Service client example (synchronous and asynchronous calls)
+- [`09_subscribe_compressed_image.py`](examples/09_subscribe_compressed_image.py) - Subscribe to CompressedImage messages (camera stream example; ZED topic by default)
+- [`10_service_server_queue.py`](examples/10_service_server_queue.py) - Service server example (queue mode; ros-z style: `take_request()` / `send_response()`)
 
 Each example is self-contained and uses automatic message/service type loading. You can copy and modify them for your use cases.
 
