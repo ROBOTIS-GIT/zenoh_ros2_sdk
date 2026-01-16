@@ -158,6 +158,8 @@ PRIMITIVE_TO_FIELD_TYPE = {
 def resolve_domain_id(domain_id: Optional[int]) -> int:
     """Resolve ROS domain ID from explicit value or ROS_DOMAIN_ID env var."""
     if domain_id is not None:
+        if domain_id < 0:
+            raise ValueError(f"domain_id must be a non-negative integer, but got {domain_id}")
         return domain_id
 
     env_value = os.environ.get("ROS_DOMAIN_ID", "").strip()
@@ -165,9 +167,14 @@ def resolve_domain_id(domain_id: Optional[int]) -> int:
         return 0
 
     try:
-        return int(env_value)
+        resolved_id = int(env_value)
     except ValueError as exc:
         raise ValueError(f"Invalid ROS_DOMAIN_ID value: {env_value!r}") from exc
+
+    if resolved_id < 0:
+        raise ValueError(f"ROS_DOMAIN_ID must be a non-negative integer, but is set to {env_value!r}")
+
+    return resolved_id
 
 
 def ros2_to_dds_type(ros2_type: str) -> str:

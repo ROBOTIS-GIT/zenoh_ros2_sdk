@@ -59,6 +59,17 @@ class TestResolveDomainId:
         with pytest.raises(ValueError, match="Invalid ROS_DOMAIN_ID"):
             resolve_domain_id(None)
 
+    def test_negative_env_raises(self, monkeypatch):
+        """Negative ROS_DOMAIN_ID raises ValueError"""
+        monkeypatch.setenv("ROS_DOMAIN_ID", "-1")
+        with pytest.raises(ValueError, match="non-negative"):
+            resolve_domain_id(None)
+
+    def test_negative_explicit_raises(self):
+        """Negative explicit domain_id raises ValueError"""
+        with pytest.raises(ValueError, match="non-negative"):
+            resolve_domain_id(-1)
+
 
 class TestGetTypeHash:
     """Tests for type hash computation"""
