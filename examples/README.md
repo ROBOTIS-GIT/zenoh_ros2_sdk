@@ -107,7 +107,10 @@ python3 examples/12_subscribe_joint_trajectory.py
 ## Running Examples
 
 Make sure you have:
-1. Zenoh router (`zenohd`) running
+1. Zenoh router running in a ROS2 environment:
+   ```bash
+   ros2 run rmw_zenoh_cpp rmw_zenohd
+   ```
 2. Set `ROS_DOMAIN_ID` if your ROS 2 domain is not 0
 3. Set the correct `router_ip` if not using localhost
 
