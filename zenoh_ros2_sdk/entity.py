@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+from .utils import slotted_dataclass
 
 
 class EntityKind(str, Enum):
@@ -24,7 +25,7 @@ class EntityKind(str, Enum):
     CLIENT = "SC"
 
 
-@dataclass(frozen=True, slots=True)
+@slotted_dataclass(frozen=True)
 class NodeEntity:
     domain_id: int
     session_id: str  # Zenoh session zid string
@@ -34,7 +35,7 @@ class NodeEntity:
     enclave: str = "%"  # SROS enclave (not fully supported; keep placeholder)
 
 
-@dataclass(frozen=True, slots=True)
+@slotted_dataclass(frozen=True)
 class EndpointEntity:
     """
     Represents a ROS graph endpoint (pub/sub/service/client) attached to a node.

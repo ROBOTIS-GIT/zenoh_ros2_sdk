@@ -10,7 +10,7 @@ from .service_server import ROS2ServiceServer
 from .message_registry import MessageRegistry, load_message_type, get_message_class, get_registry, load_service_type
 from .logger import get_logger
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __all__ = [
     "ZenohSession",
     "ROS2Publisher",

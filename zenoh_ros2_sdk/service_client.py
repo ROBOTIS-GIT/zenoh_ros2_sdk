@@ -10,7 +10,7 @@ import threading
 from typing import Any, Callable, Optional
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, compute_service_type_hash, load_dependencies_recursive
+from .utils import ros2_to_dds_type, compute_service_type_hash, load_dependencies_recursive, resolve_domain_id
 from .entity import EntityKind, NodeEntity, EndpointEntity
 from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
 from .qos import QosProfile, DEFAULT_QOS_PROFILE
@@ -32,7 +32,7 @@ class ROS2ServiceClient:
         response_definition: str = "",
         node_name: Optional[str] = None,
         namespace: str = "/",
-        domain_id: int = 0,
+        domain_id: Optional[int] = None,
         router_ip: str = "127.0.0.1",
         router_port: int = 7447,
         type_hash: Optional[str] = None,
@@ -53,7 +53,7 @@ class ROS2ServiceClient:
             response_definition: Response message definition text (empty to auto-load)
             node_name: Node name (auto-generated if None)
             namespace: Node namespace
-            domain_id: ROS domain ID
+            domain_id: ROS domain ID (defaults to ROS_DOMAIN_ID or 0)
             router_ip: Zenoh router IP
             router_port: Zenoh router port
             type_hash: Service type hash (auto-detected if None)
@@ -67,7 +67,7 @@ class ROS2ServiceClient:
         """
         self.service_name = service_name
         self.srv_type = srv_type
-        self.domain_id = domain_id
+        self.domain_id = resolve_domain_id(domain_id)
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_service_client_{uuid.uuid4().hex[:8]}"
         self.timeout = timeout
@@ -195,7 +195,7 @@ class ROS2ServiceClient:
 
         # Build keyexpr for service (used for queries)
         # Format: domain_id/service_name/dds_type_name/type_hash
-        self.keyexpr = topic_keyexpr(domain_id, service_name, self.dds_type_name, type_hash)
+        self.keyexpr = topic_keyexpr(self.domain_id, service_name, self.dds_type_name, type_hash)
 
         # Declare liveliness tokens
         self._declare_liveliness_tokens()

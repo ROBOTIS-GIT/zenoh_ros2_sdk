@@ -16,8 +16,7 @@ def main():
     # Create publisher
     pub = ROS2Publisher(
         topic="/chatter",
-        msg_type="std_msgs/msg/String",
-        domain_id=30
+        msg_type="std_msgs/msg/String"
     )
 
     try:

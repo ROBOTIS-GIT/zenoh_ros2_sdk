@@ -17,7 +17,7 @@ Publish:
 ```python
 from zenoh_ros2_sdk import ROS2Publisher
 
-pub = ROS2Publisher(topic="/chatter", msg_type="std_msgs/msg/String", domain_id=30)
+pub = ROS2Publisher(topic="/chatter", msg_type="std_msgs/msg/String")
 pub.publish(data="Hello from zenoh-ros2-sdk")
 pub.close()
 ```
@@ -33,8 +33,7 @@ def on_msg(msg):
 sub = ROS2Subscriber(
     topic="/chatter",
     msg_type="std_msgs/msg/String",
-    callback=on_msg,
-    domain_id=30,
+    callback=on_msg
 )
 ```
 

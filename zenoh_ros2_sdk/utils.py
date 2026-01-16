@@ -3,9 +3,12 @@ Utility functions for type conversion and message handling
 """
 import hashlib
 import json
+import os
 import re
 from copy import deepcopy
 from typing import Dict, List, Optional, Set
+import sys
+from dataclasses import dataclass
 
 # RIHS constants
 RIHS01_PREFIX = 'RIHS01_'
@@ -152,6 +155,28 @@ PRIMITIVE_TO_FIELD_TYPE = {
     'byte': 'FIELD_TYPE_BYTE',
     'octet': 'FIELD_TYPE_BYTE',
 }
+
+
+def resolve_domain_id(domain_id: Optional[int]) -> int:
+    """Resolve ROS domain ID from explicit value or ROS_DOMAIN_ID env var."""
+    if domain_id is not None:
+        if domain_id < 0:
+            raise ValueError(f"domain_id must be a non-negative integer, but got {domain_id}")
+        return domain_id
+
+    env_value = os.environ.get("ROS_DOMAIN_ID", "").strip()
+    if not env_value:
+        return 0
+
+    try:
+        resolved_id = int(env_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid ROS_DOMAIN_ID value: {env_value!r}") from exc
+
+    if resolved_id < 0:
+        raise ValueError(f"ROS_DOMAIN_ID must be a non-negative integer, but is set to {env_value!r}")
+
+    return resolved_id
 
 
 def ros2_to_dds_type(ros2_type: str) -> str:
@@ -671,3 +696,20 @@ def load_dependencies_recursive(
                 all_dependencies.update(nested_deps)
 
     return all_dependencies
+
+
+def slotted_dataclass(cls=None, /, *, frozen=False, **kwargs):
+    """
+    Decorator compatible with Python < 3.10 that uses slots=True only if supported.
+    Python 3.10+ adds slots=True support to dataclasses.
+    Note: Python 3.8 is no longer supported by the project, but we keep this check generic.
+    """
+    if sys.version_info >= (3, 10):
+        kwargs["slots"] = True
+    
+    def wrap(cls):
+        return dataclass(cls, frozen=frozen, **kwargs)
+
+    if cls is None:
+        return wrap
+    return wrap(cls)

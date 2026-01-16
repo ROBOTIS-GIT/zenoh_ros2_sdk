@@ -4,7 +4,7 @@ This SDK follows the same conventions as `rmw_zenoh_cpp` / `ros-z` so ROS tools 
 
 ## Domain ID
 
-ROS 2 uses a *domain ID* to isolate graphs. In this SDK you typically pass `domain_id` to publishers/subscribers/service endpoints. You must use the same `domain_id` as the ROS 2 side you want to communicate with.
+ROS 2 uses a *domain ID* to isolate graphs. In this SDK you typically pass `domain_id` to publishers/subscribers/service endpoints. You must use the same `domain_id` as the ROS 2 side you want to communicate with. If you do not pass `domain_id` to the constructor, the SDK uses `ROS_DOMAIN_ID` from the environment (falling back to 0 when it is not set). An explicit `domain_id` argument always overrides the environment value.
 
 ## Types and type hashes
 

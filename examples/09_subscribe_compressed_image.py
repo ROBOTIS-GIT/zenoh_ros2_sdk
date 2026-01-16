@@ -54,9 +54,7 @@ def main():
     sub = ROS2Subscriber(
         topic="/zed/zed_node/left/image_rect_color/compressed",
         msg_type="sensor_msgs/msg/CompressedImage",
-        callback=on_message,
-        router_ip="192.168.6.2",
-        domain_id=30,  # adjust if your ROS 2 domain is different
+        callback=on_message
     )
 
     try:

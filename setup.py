@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="zenoh-ros2-sdk",
-    version="0.1.1",
+    version="0.1.2",
     author="Woojin Wie",
     author_email="wwj@robotis.com",
     description="Python SDK for ROS2 communication via Zenoh - No ROS2 installation required",

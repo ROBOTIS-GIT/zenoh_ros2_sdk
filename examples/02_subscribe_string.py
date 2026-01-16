@@ -20,8 +20,7 @@ def main():
     sub = ROS2Subscriber(
         topic="/chatter",
         msg_type="std_msgs/msg/String",
-        callback=on_message,
-        domain_id=30
+        callback=on_message
     )
 
     try:

@@ -27,8 +27,7 @@ def main():
     # Create publisher
     pub = ROS2Publisher(
         topic="/joint_states",
-        msg_type="sensor_msgs/msg/JointState",
-        domain_id=30
+        msg_type="sensor_msgs/msg/JointState"
     )
 
     # Example joint names (adjust to match your robot)

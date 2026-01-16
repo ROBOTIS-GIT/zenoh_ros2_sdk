@@ -51,8 +51,7 @@ def main():
     sub = ROS2Subscriber(
         topic="/joint_states",
         msg_type="sensor_msgs/msg/JointState",
-        callback=on_message,
-        domain_id=30
+        callback=on_message
     )
 
     try:
