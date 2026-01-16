@@ -18,10 +18,10 @@ pip install -e .
 
 ## Start a Zenoh router (optional but common)
 
-Many setups use a local router:
+Many setups use a local router. Execute the Zenoh router in a ROS2 environment:
 
 ```bash
-zenohd
+ros2 run rmw_zenoh_cpp rmw_zenohd
 ```
 
 If you are connecting to a remote router, pass `router_ip` / `router_port` when creating publishers/subscribers/service endpoints.

@@ -2,10 +2,10 @@
 
 The repo contains runnable scripts in `examples/` (numbered in recommended learning order).
 
-Start a router:
+Start a router in a ROS2 environment:
 
 ```bash
-zenohd
+ros2 run rmw_zenoh_cpp rmw_zenohd
 ```
 
 Run an example:

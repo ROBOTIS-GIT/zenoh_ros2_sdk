@@ -1,11 +1,17 @@
 ---
-name: Bump Version
-description: Bump the version of the zenoh-ros2-sdk package across all configuration files.
+name: bump-version
+description: Bump the version of the zenoh-ros2-sdk package across all configuration files. Use when the user asks to update, bump, or change the package version, or when preparing a new release.
 ---
 
 # Bump Version
 
 This skill guides you through upgrading the version number of the `zenoh-ros2-sdk` package.
+
+## When to Use
+
+- User asks to "bump", "update", or "change" the version
+- Preparing a new release (major, minor, or patch)
+- Version numbers are out of sync across config files
 
 ## 1. Determine the New Version
 
