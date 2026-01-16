@@ -11,7 +11,7 @@ import threading
 from collections import deque
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, compute_service_type_hash, load_dependencies_recursive, resolve_domain_id
+from .utils import ros2_to_dds_type, compute_service_type_hash, load_dependencies_recursive, resolve_domain_id, slotted_dataclass
 from .entity import EntityKind, NodeEntity, EndpointEntity
 from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
 from .qos import QosProfile, DEFAULT_QOS_PROFILE
@@ -22,7 +22,7 @@ from .logger import get_logger
 logger = get_logger("service_server")
 
 
-@dataclass(frozen=True, slots=True)
+@slotted_dataclass(frozen=True)
 class ServiceRequestKey:
     """
     Correlation key for service requests, aligned with ros-z QueryKey and rmw_zenoh.

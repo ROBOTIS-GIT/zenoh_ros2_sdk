@@ -7,6 +7,8 @@ import os
 import re
 from copy import deepcopy
 from typing import Dict, List, Optional, Set
+import sys
+from dataclasses import dataclass
 
 # RIHS constants
 RIHS01_PREFIX = 'RIHS01_'
@@ -694,3 +696,19 @@ def load_dependencies_recursive(
                 all_dependencies.update(nested_deps)
 
     return all_dependencies
+
+
+def slotted_dataclass(cls=None, /, *, frozen=False, **kwargs):
+    """
+    Decorator compatible with Python < 3.10 that uses slots=True only if supported.
+    Python 3.10+ adds slots=True support to dataclasses.
+    """
+    if sys.version_info >= (3, 10):
+        kwargs["slots"] = True
+    
+    def wrap(cls):
+        return dataclass(cls, frozen=frozen, **kwargs)
+
+    if cls is None:
+        return wrap
+    return wrap(cls)

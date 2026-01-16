@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple
+from .utils import slotted_dataclass
 
 
 class QosReliability(Enum):
@@ -37,7 +38,7 @@ class QosLiveliness(Enum):
     MANUAL_BY_TOPIC = 3
 
 
-@dataclass(frozen=True, slots=True)
+@slotted_dataclass(frozen=True)
 class Duration:
     sec: int
     nsec: int
@@ -47,7 +48,7 @@ class Duration:
 DURATION_INFINITE = Duration(sec=9223372036, nsec=854775807)
 
 
-@dataclass(frozen=True, slots=True)
+@slotted_dataclass(frozen=True)
 class QosProfile:
     """QoS profile compatible with rmw_zenoh / ros-z QoS token encoding.
 

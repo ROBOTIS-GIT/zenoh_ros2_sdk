@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import struct
+from .utils import slotted_dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@slotted_dataclass(frozen=True)
 class Attachment:
     """Service/topic attachment compatible with rmw_zenoh.
 
