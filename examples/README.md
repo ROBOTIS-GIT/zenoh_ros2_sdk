@@ -88,6 +88,22 @@ Demonstrates a service server in queue mode (ros-z style): `take_request()` / `s
 python3 examples/10_service_server_queue.py
 ```
 
+### [`11_publish_joint_trajectory.py`](11_publish_joint_trajectory.py)
+Demonstrates how to publish `trajectory_msgs/msg/JointTrajectory` messages, commonly used to command robot joint movements along a trajectory. Shows how to work with nested message types (Header, JointTrajectoryPoint, Duration) and arrays of trajectory points.
+
+**Usage:**
+```bash
+python3 examples/11_publish_joint_trajectory.py
+```
+
+### [`12_subscribe_joint_trajectory.py`](12_subscribe_joint_trajectory.py)
+Demonstrates how to subscribe to `trajectory_msgs/msg/JointTrajectory` messages and access trajectory information including joint names, positions, velocities, accelerations, efforts, and timing for each waypoint.
+
+**Usage:**
+```bash
+python3 examples/12_subscribe_joint_trajectory.py
+```
+
 ## Running Examples
 
 Make sure you have:
