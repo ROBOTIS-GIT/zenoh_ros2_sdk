@@ -702,6 +702,7 @@ def slotted_dataclass(cls=None, /, *, frozen=False, **kwargs):
     """
     Decorator compatible with Python < 3.10 that uses slots=True only if supported.
     Python 3.10+ adds slots=True support to dataclasses.
+    Note: Python 3.8 is no longer supported by the project, but we keep this check generic.
     """
     if sys.version_info >= (3, 10):
         kwargs["slots"] = True
