@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="zenoh-ros2-sdk",
-    version="0.1.2",
+    version="0.1.3",
     author="Woojin Wie",
     author_email="wwj@robotis.com",
     description="Python SDK for ROS2 communication via Zenoh - No ROS2 installation required",
@@ -23,15 +23,15 @@ setup(
         "Topic :: Scientific/Engineering",
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     install_requires=[
         "eclipse-zenoh>=0.10.0",
-        "rosbags>=0.11.0",
+        "rosbags>=0.9.10",
         "GitPython>=3.1.18",
         "tqdm>=4.64.0",
         "json5>=0.9.0",
