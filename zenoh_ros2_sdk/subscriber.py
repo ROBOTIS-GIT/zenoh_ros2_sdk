@@ -8,7 +8,7 @@ from .session import ZenohSession
 from .utils import ros2_to_dds_type, get_type_hash, load_dependencies_recursive, resolve_domain_id
 from .entity import EntityKind, NodeEntity, EndpointEntity
 from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
-from .qos import QosProfile, DEFAULT_QOS_PROFILE
+from .qos import QosProfile, QosDurability, DEFAULT_QOS_PROFILE
 from .message_registry import get_registry
 from .logger import get_logger
 
@@ -126,6 +126,12 @@ class ROS2Subscriber:
         self.sub = self.session_mgr.session.declare_subscriber(self.keyexpr, self._listener)
         self._closed = False
 
+        # For transient_local durability, query for cached/historical data
+        # This mimics rmw_zenoh's AdvancedSubscriber behavior
+        self.qos_profile, _ = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
+        if self.qos_profile.durability == QosDurability.TRANSIENT_LOCAL:
+            self._query_historical_data()
+
     @staticmethod
     def _normalize_qos(
         qos: Optional[object],
@@ -171,6 +177,10 @@ class ROS2Subscriber:
 
     def _listener(self, sample):
         """Internal message listener"""
+        self._process_sample(sample)
+
+    def _process_sample(self, sample):
+        """Process a Zenoh sample (from subscription or query reply)"""
         try:
             payload = getattr(sample, "payload", None)
             if payload is None:
@@ -205,6 +215,67 @@ class ROS2Subscriber:
             self.callback(msg)
         except Exception as e:
             logger.error(f"Error deserializing message on topic {self.topic}: {e}", exc_info=True)
+
+    def _query_historical_data(self):
+        """Query for cached data from transient_local publishers.
+
+        rmw_zenoh uses AdvancedPublisher which caches messages at:
+            <key_expr>/@adv/pub/<zenoh_id>/<entity_id>/_
+
+        The `_anyke` selector parameter allows replies on any key expression.
+        Zenoh uses ';' as parameter separator (not '&').
+        """
+        publishers = self._discover_publishers()
+        if not publishers:
+            logger.debug(f"No transient_local publishers for {self.topic}")
+            return
+
+        max_samples = self.qos_profile.history_depth
+        total_replies = 0
+
+        for zenoh_id in publishers:
+            # Query the AdvancedPublisher cache with _anyke to accept any reply key
+            selector = f"{self.keyexpr}/@adv/pub/{zenoh_id}/**?_anyke;_max={max_samples}"
+
+            try:
+                for reply in self.session_mgr.session.get(selector, timeout=2.0):
+                    if reply.ok is not None:
+                        total_replies += 1
+                        self._process_sample(reply.ok)
+                    elif reply.err is not None:
+                        logger.warning(f"Query error for {self.topic}: {reply.err}")
+            except Exception as e:
+                logger.warning(f"Failed to query publisher {zenoh_id}: {e}")
+
+        if total_replies > 0:
+            logger.debug(f"Received {total_replies} cached samples for {self.topic}")
+
+    def _discover_publishers(self) -> list[str]:
+        """Discover publishers for this topic via liveliness tokens.
+
+        Returns:
+            List of zenoh_id strings for each publisher found.
+        """
+        publishers = set()
+
+        # rmw_zenoh liveliness token format:
+        # @ros2_lv/<domain>/<zenoh_id>/<seq>/<entity_id>/MP/<gid_hi>/<gid_lo>/<node>/%<topic>/<dds_type>/<type_hash>/<qos>
+        lv_pattern = (
+            f"@ros2_lv/{self.domain_id}/*/*/*/MP/*/*/*"
+            f"/%{self.topic.lstrip('/')}/{self.dds_type_name}/{self.type_hash}/*"
+        )
+
+        try:
+            replies = self.session_mgr.liveliness.get(lv_pattern, timeout=2.0)
+            for reply in replies:
+                if reply.ok is not None:
+                    parts = str(reply.ok.key_expr).split('/')
+                    if len(parts) > 2:
+                        publishers.add(parts[2])  # zenoh_id is at index 2
+        except Exception as e:
+            logger.warning(f"Failed to discover publishers for {self.topic}: {e}")
+
+        return list(publishers)
 
     def close(self):
         """
