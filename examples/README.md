@@ -104,6 +104,14 @@ Demonstrates how to subscribe to `trajectory_msgs/msg/JointTrajectory` messages 
 python3 examples/12_subscribe_joint_trajectory.py
 ```
 
+### [`13_subscribe_robot_description.py`](13_subscribe_robot_description.py)
+Demonstrates how to subscribe to the `/robot_description` topic and receive the URDF XML string. Uses **TRANSIENT_LOCAL** durability QoS to receive cached messages that were published before the subscriber started (like `ros2 topic echo` does).
+
+**Usage:**
+```bash
+python3 examples/13_subscribe_robot_description.py
+```
+
 ## Running Examples
 
 Make sure you have:
