@@ -78,8 +78,9 @@ Structure: `<repo_root>/msg/<message>.msg` or `<repo_root>/<package>/msg/<messag
 ## 3. Determine Commit/Tag
 
 Choose an appropriate commit or tag:
-- **Stable releases**: Use ROS2 distribution tags (e.g., `humble`, `iron`, `jazzy`)
-- **Rolling**: Use `rolling` branch for latest development
+- **Recommended**: Use stable ROS2 distribution tags (e.g., `jazzy`, `iron`, `humble`) for consistency with other repositories
+- **Default**: Use `jazzy` to match existing repositories (`rcl_interfaces`, `common_interfaces`, `example_interfaces`, `geometry2`)
+- **Rolling**: Use `rolling` branch only if you need latest development features
 - **Specific version**: Use commit SHA or version tag for reproducibility
 
 Check available tags:
@@ -99,7 +100,7 @@ Edit `zenoh_ros2_sdk/_repositories.py` and add a new entry to `MESSAGE_REPOSITOR
 # Repository name (descriptive, matches repo name)
 "repository_name": MessageRepository(
     url="https://github.com/ros2/repository_name.git",
-    commit="jazzy",  # or "rolling", or specific tag/commit
+    commit="jazzy",  # Use jazzy for consistency with other repositories
     cache_path="repository_name",  # Local cache directory name
     msg_path="",  # Empty for standard structure: <package>/msg/<message>.msg
     packages=[
@@ -115,7 +116,7 @@ Edit `zenoh_ros2_sdk/_repositories.py` and add a new entry to `MESSAGE_REPOSITOR
 ```python
 "package_name": MessageRepository(
     url="https://github.com/ros2/package_name.git",
-    commit="rolling",  # or specific tag
+    commit="jazzy",  # Use jazzy for consistency, or specific tag/commit
     cache_path="package_name",
     msg_path="",  # Adjust if messages are at repo root vs package subdirectory
     packages=[
@@ -132,7 +133,7 @@ Edit `zenoh_ros2_sdk/_repositories.py` and add a new entry to `MESSAGE_REPOSITOR
 # Reference: https://github.com/ros2/geometry2
 "geometry2": MessageRepository(
     url="https://github.com/ros2/geometry2.git",
-    commit="rolling",  # Use rolling branch for latest TF2 messages
+    commit="jazzy",  # Use specific commit/tag for reproducibility
     cache_path="geometry2",
     msg_path="",  # Messages are at <package>/msg/<message>.msg
     packages=[
@@ -197,4 +198,4 @@ if TFMessage:
 - **Cache Location**: Repositories are cached in `~/.cache/zenoh_ros2_sdk/` (or `$ZENOH_ROS2_SDK_CACHE`)
 - **Automatic Download**: Messages are downloaded automatically when first requested
 - **Dependencies**: Message dependencies are resolved automatically
-- **Consistency**: Use consistent commit/tag strategy (prefer stable tags for production)
+- **Consistency**: Use `jazzy` as the default commit tag to match existing repositories for consistency and reproducibility
