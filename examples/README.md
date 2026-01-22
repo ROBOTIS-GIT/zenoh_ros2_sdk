@@ -112,6 +112,14 @@ Demonstrates how to subscribe to the `/robot_description` topic and receive the 
 python3 examples/13_subscribe_robot_description.py
 ```
 
+### [`14_subscribe_diagnostics.py`](14_subscribe_diagnostics.py)
+Demonstrates how to subscribe to `diagnostic_msgs/msg/DiagnosticArray` messages and access diagnostic information from system components, including status levels (OK, WARN, ERROR, STALE), component names, messages, hardware IDs, and key-value pairs.
+
+**Usage:**
+```bash
+python3 examples/14_subscribe_diagnostics.py
+```
+
 ## Running Examples
 
 Make sure you have:

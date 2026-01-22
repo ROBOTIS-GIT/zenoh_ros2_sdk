@@ -212,6 +212,11 @@ def _parse_msg_definition(msg_def: str) -> List[Dict]:
         field_type = parts[0]
         field_name = parts[1]
 
+        # Skip constants (format: type CONSTANT_NAME=value)
+        # Constants should not be included in the type hash calculation
+        if '=' in field_name:
+            continue
+
         # Check for array/sequence notation
         is_array = False
         is_bounded = False
