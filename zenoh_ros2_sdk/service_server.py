@@ -162,11 +162,15 @@ class ROS2ServiceServer:
                             if not hash_response_def:
                                 hash_response_def = parts[1].strip()
 
-                            # Validate that we got both parts
-                            if not hash_request_def:
-                                raise ValueError(
-                                    f"Service definition file for {srv_type} has empty request definition"
-                                )
+                            def has_fields(definition: str) -> bool:
+                                for line in definition.split('\n'):
+                                    line = line.strip()
+                                    if line and not line.startswith('#'):
+                                        return True
+                                return False
+
+                            if not has_fields(hash_request_def):
+                                hash_request_def = "# Empty request"
                             if not hash_response_def:
                                 raise ValueError(
                                     f"Service definition file for {srv_type} has empty response definition"
