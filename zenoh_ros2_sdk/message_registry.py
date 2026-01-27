@@ -344,7 +344,8 @@ class MessageRegistry:
                 # Check if it's a custom type (not a primitive)
                 primitives = ['bool', 'int8', 'uint8', 'int16', 'uint16',
                             'int32', 'uint32', 'int64', 'uint64',
-                            'float32', 'float64', 'string', 'time', 'duration']
+                            'float32', 'float64', 'string', 'time', 'duration',
+                            'byte', 'char', 'wchar', 'wstring', 'octet']
 
                 if base_type not in primitives and not base_type.startswith('['):
                     # Resolve namespace

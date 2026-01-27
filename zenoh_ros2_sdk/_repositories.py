@@ -70,11 +70,23 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
     # Reference: https://github.com/ros2/example_interfaces
     "example_interfaces": MessageRepository(
         url="https://github.com/ros2/example_interfaces.git",
-        commit="rolling",  # Use rolling branch for latest examples
+        commit="jazzy",  # Use specific commit/tag for reproducibility
         cache_path="example_interfaces",
         msg_path="",  # Files are directly at repo root: msg/ and srv/ (not in a package subdirectory)
         packages=[
             "example_interfaces",  # Contains AddTwoInts service and other examples
+        ],
+    ),
+    # Geometry2 (contains tf2_msgs and other TF2-related packages)
+    # This repository contains TF2 transform message definitions
+    # Reference: https://github.com/ros2/geometry2
+    "geometry2": MessageRepository(
+        url="https://github.com/ros2/geometry2.git",
+        commit="jazzy",  # Use specific commit/tag for reproducibility
+        cache_path="geometry2",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "tf2_msgs",  # Contains TFMessage, TF2Error messages
         ],
     ),
 }

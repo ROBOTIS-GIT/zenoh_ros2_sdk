@@ -31,7 +31,7 @@ class ROS2Publisher:
         self,
         topic: str,
         msg_type: str,
-        msg_definition: str = "",
+        msg_definition: Optional[str] = None,
         node_name: Optional[str] = None,
         namespace: str = "/",
         domain_id: Optional[int] = None,
@@ -47,7 +47,7 @@ class ROS2Publisher:
         Args:
             topic: ROS2 topic name (e.g., "/chatter")
             msg_type: ROS2 message type (e.g., "std_msgs/msg/String")
-            msg_definition: Message definition text (empty string to auto-load from registry)
+            msg_definition: Message definition text (None to auto-load from registry)
             node_name: Node name (auto-generated if None)
             namespace: Node namespace
             domain_id: ROS domain ID (defaults to ROS_DOMAIN_ID or 0)
@@ -84,9 +84,11 @@ class ROS2Publisher:
         # Get type hash if not provided
         if type_hash is None:
             # Get message definition for hash computation
+            # If msg_definition is None, load from registry (same as register_message_type does)
+            # Empty string ("") is valid for messages with no fields (like std_msgs/msg/Empty)
             hash_msg_definition = msg_definition
-            if not hash_msg_definition:
-                # Try to get from message registry
+            if hash_msg_definition is None:
+                # Load from registry (same logic as register_message_type)
                 try:
                     registry = get_registry()
                     msg_file = registry.get_msg_file_path(msg_type)
@@ -98,7 +100,8 @@ class ROS2Publisher:
                     logger.debug(f"Could not load message definition from registry for {msg_type}: {e}")
                     pass
 
-            if not hash_msg_definition:
+            # If still None after trying to load, raise error
+            if hash_msg_definition is None:
                 raise ValueError(
                     f"Cannot compute type hash for {msg_type}: message definition not provided. "
                     "Please provide msg_definition or ensure the message type is loaded in the registry."
