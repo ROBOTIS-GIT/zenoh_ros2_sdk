@@ -7,6 +7,7 @@ import json5
 import zenoh
 import uuid
 import threading
+from typing import Optional
 from rosbags.typesys import get_types_from_msg, get_typestore, Stores
 from .message_registry import get_registry, load_service_type
 from .logger import get_logger
@@ -115,7 +116,7 @@ class ZenohSession:
                     cls._instance = cls(router_ip, router_port)
         return cls._instance
 
-    def register_message_type(self, msg_definition: str, ros2_type_name: str):
+    def register_message_type(self, msg_definition: Optional[str], ros2_type_name: str):
         """Register a ROS2 message type"""
         # Check if already registered and in store
         if ros2_type_name in self._registered_types:
@@ -144,9 +145,37 @@ class ZenohSession:
             logger.warning(f"Type {ros2_type_name} was marked as registered but not in store, re-registering")
             del self._registered_types[ros2_type_name]
 
-        # If msg_definition is empty, try to load from message registry
-        if not msg_definition.strip():
+        # If msg_definition is None, try to load from message registry
+        if msg_definition is None:
             registry = get_registry()
+            
+            # Special case: handle messages with empty definitions (like std_msgs/msg/Empty)
+            # If the .msg file exists and is empty, register it directly to prevent recursion
+            try:
+                msg_file = registry.get_msg_file_path(ros2_type_name)
+                if msg_file and msg_file.exists():
+                    with open(msg_file, 'r') as f:
+                        file_content = f.read()
+                    # If file is empty (valid for messages with no fields), register it directly
+                    if not file_content.strip():
+                        types = get_types_from_msg("", ros2_type_name)
+                        self.store.register(types)
+                        # Find the actual key that was registered (same logic as below)
+                        actual_type_key = None
+                        for key in types.keys():
+                            if key == ros2_type_name:
+                                actual_type_key = key
+                                break
+                        if actual_type_key is None and types:
+                            actual_type_key = list(types.keys())[0]
+                        if actual_type_key:
+                            self._registered_types[ros2_type_name] = actual_type_key
+                            msg_class = self.store.types.get(actual_type_key)
+                            if msg_class is not None:
+                                return msg_class
+            except Exception:
+                # If file check or registration fails, fall through to registry loading
+                pass
 
             # Check if this is a service request/response type
             # Service types are like "namespace/srv/ServiceName_Request" or "namespace/srv/ServiceName_Response"

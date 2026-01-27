@@ -120,6 +120,38 @@ Demonstrates how to subscribe to `diagnostic_msgs/msg/DiagnosticArray` messages 
 python3 examples/14_subscribe_diagnostics.py
 ```
 
+### [`15_publish_imu.py`](15_publish_imu.py)
+Demonstrates how to publish `sensor_msgs/msg/Imu` messages, commonly used to report IMU sensor data (orientation, angular velocity, linear acceleration). Shows how to work with nested message types (Header, Quaternion, Vector3) and covariance arrays.
+
+**Usage:**
+```bash
+python3 examples/15_publish_imu.py
+```
+
+### [`16_subscribe_imu.py`](16_subscribe_imu.py)
+Demonstrates how to subscribe to `sensor_msgs/msg/Imu` messages and access IMU data including orientation (quaternion), angular velocity, and linear acceleration. Includes message rate calculation and quaternion validation.
+
+**Usage:**
+```bash
+python3 examples/16_subscribe_imu.py
+```
+
+### [`17_publish_empty.py`](17_publish_empty.py)
+Demonstrates how to publish `std_msgs/msg/Empty` messages, used for signaling or triggering events where no data payload is needed.
+
+**Usage:**
+```bash
+python3 examples/17_publish_empty.py
+```
+
+### [`18_subscribe_empty.py`](18_subscribe_empty.py)
+Demonstrates how to subscribe to `std_msgs/msg/Empty` messages and react to trigger events.
+
+**Usage:**
+```bash
+python3 examples/18_subscribe_empty.py
+```
+
 ## Running Examples
 
 Make sure you have:
