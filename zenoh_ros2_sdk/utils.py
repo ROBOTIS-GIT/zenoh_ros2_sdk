@@ -315,10 +315,30 @@ def _serialize_field(field: Dict, msg_type: str) -> Dict:
 
 
 def _serialize_type_description(msg_type: str, fields: List[Dict]) -> Dict:
-    """Serialize a message type to type description format"""
+    """Serialize a message type to type description format.
+
+    For empty message types (no fields), ROS2 adds a placeholder field called
+    'structure_needs_at_least_one_member' of type uint8 to ensure the struct
+    is not empty in C/C++.
+    """
+    serialized_fields = [_serialize_field(f, msg_type) for f in fields]
+
+    # Add placeholder for empty message types (ROS2 IDL requirement)
+    if not serialized_fields:
+        serialized_fields = [{
+            'name': 'structure_needs_at_least_one_member',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_UINT8'],
+                'capacity': 0,
+                'string_capacity': 0,
+                'nested_type_name': '',
+            },
+            'default_value': '',
+        }]
+
     return {
         'type_name': msg_type,
-        'fields': [_serialize_field(f, msg_type) for f in fields],
+        'fields': serialized_fields,
     }
 
 
