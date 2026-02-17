@@ -28,8 +28,8 @@ class ROS2ServiceClient:
         self,
         service_name: str,
         srv_type: str,
-        request_definition: Optional[str] = None,
-        response_definition: Optional[str] = None,
+        request_definition: str = "",
+        response_definition: str = "",
         node_name: Optional[str] = None,
         namespace: str = "/",
         domain_id: Optional[int] = None,
@@ -49,8 +49,8 @@ class ROS2ServiceClient:
         Args:
             service_name: ROS2 service name (e.g., "/add_two_ints")
             srv_type: ROS2 service type (e.g., "example_interfaces/srv/AddTwoInts")
-            request_definition: Request message definition text (None to auto-load)
-            response_definition: Response message definition text (None to auto-load)
+            request_definition: Request message definition text (empty to auto-load)
+            response_definition: Response message definition text (empty to auto-load)
             node_name: Node name (auto-generated if None)
             namespace: Node namespace
             domain_id: ROS domain ID (defaults to ROS_DOMAIN_ID or 0)
@@ -143,11 +143,15 @@ class ROS2ServiceClient:
                             if not hash_response_def:
                                 hash_response_def = parts[1].strip()
 
-                            # Validate that we got both parts
-                            if not hash_request_def:
-                                raise ValueError(
-                                    f"Service definition file for {srv_type} has empty request definition"
-                                )
+                            def has_fields(definition: str) -> bool:
+                                for line in definition.split('\n'):
+                                    line = line.strip()
+                                    if line and not line.startswith('#'):
+                                        return True
+                                return False
+
+                            if not has_fields(hash_request_def):
+                                hash_request_def = "# Empty request"
                             if not hash_response_def:
                                 raise ValueError(
                                     f"Service definition file for {srv_type} has empty response definition"

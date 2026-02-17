@@ -40,8 +40,8 @@ class ROS2ServiceServer:
         service_name: str,
         srv_type: str,
         callback: Optional[Callable] = None,
-        request_definition: Optional[str] = None,
-        response_definition: Optional[str] = None,
+        request_definition: str = "",
+        response_definition: str = "",
         node_name: Optional[str] = None,
         namespace: str = "/",
         domain_id: Optional[int] = None,
@@ -67,8 +67,8 @@ class ROS2ServiceServer:
             service_name: ROS2 service name (e.g., "/add_two_ints")
             srv_type: ROS2 service type (e.g., "example_interfaces/srv/AddTwoInts")
             callback: Callback function(request_msg) -> response_msg called when request is received
-            request_definition: Request message definition text (None to auto-load)
-            response_definition: Response message definition text (None to auto-load)
+            request_definition: Request message definition text (empty to auto-load)
+            response_definition: Response message definition text (empty to auto-load)
             node_name: Node name (auto-generated if None)
             namespace: Node namespace
             domain_id: ROS domain ID (defaults to ROS_DOMAIN_ID or 0)
@@ -162,11 +162,15 @@ class ROS2ServiceServer:
                             if not hash_response_def:
                                 hash_response_def = parts[1].strip()
 
-                            # Validate that we got both parts
-                            if not hash_request_def:
-                                raise ValueError(
-                                    f"Service definition file for {srv_type} has empty request definition"
-                                )
+                            def has_fields(definition: str) -> bool:
+                                for line in definition.split('\n'):
+                                    line = line.strip()
+                                    if line and not line.startswith('#'):
+                                        return True
+                                return False
+
+                            if not has_fields(hash_request_def):
+                                hash_request_def = "# Empty request"
                             if not hash_response_def:
                                 raise ValueError(
                                     f"Service definition file for {srv_type} has empty response definition"
@@ -329,8 +333,21 @@ class ROS2ServiceServer:
         query_key = str(query.key_expr) if hasattr(query, 'key_expr') else 'unknown'
         logger.debug(f"Service request received. Query keyexpr: {query_key}, Expected: {self.keyexpr}")
         try:
-            # Verified in-container: query.payload is a ZBytes and supports to_bytes().
+            # Try multiple ways to get payload (compatibility with different zenoh versions)
             payload = getattr(query, "payload", None)
+
+            # Try query.value() for older API
+            if payload is None:
+                try:
+                    value = query.value()
+                    if value is not None:
+                        payload = getattr(value, "payload", None)
+                except Exception:
+                    pass
+
+            # Try query.attachment for payload in attachment
+            attachment_raw = getattr(query, "attachment", None)
+
             if payload is None or not hasattr(payload, "to_bytes"):
                 error_msg = (
                     "Service request has unsupported payload shape. Expected query.payload with to_bytes(). "

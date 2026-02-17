@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Setup script for zenoh-ros2-sdk"""
+import os
 from setuptools import setup, find_packages
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+# Handle README.md gracefully for colcon build (runs from build/ directory)
+readme_path = os.path.join(os.path.dirname(__file__), "README.md")
+if os.path.exists(readme_path):
+    with open(readme_path, "r", encoding="utf-8") as fh:
+        long_description = fh.read()
+else:
+    long_description = "Python SDK for ROS2 communication via Zenoh"
 
 setup(
     name="zenoh-ros2-sdk",
-    version="0.1.6",
+    version="0.1.7",
     author="Woojin Wie",
     author_email="wwj@robotis.com",
     description="Python SDK for ROS2 communication via Zenoh - No ROS2 installation required",

@@ -14,11 +14,6 @@ from dataclasses import dataclass
 RIHS01_PREFIX = 'RIHS01_'
 RIHS01_HASH_VALUE_SIZE = 32
 
-# Empty structure member name (from rosidl_parser.definition)
-# IDL/DDS structures require at least one member, so ROS2 adds this dummy member
-# to empty message types during the .msg to .idl conversion
-EMPTY_STRUCTURE_REQUIRED_MEMBER_NAME = 'structure_needs_at_least_one_member'
-
 # Field type mappings (from type_description_interfaces/msgs/FieldType.msg)
 # Copied directly from rosidl_generator_type_description to ensure exact match
 FIELD_TYPE_NAME_TO_ID = {
@@ -209,10 +204,7 @@ def _parse_msg_definition(msg_def: str) -> List[Dict]:
             continue
 
         # Parse field: type name [array_size]
-        # Handle formats:
-        #   - "string[] name" (unbounded sequence)
-        #   - "string[10] name" (fixed-size array in type)
-        #   - "string name[10]" (fixed-size array after name)
+        # Handle both formats: "string[] name" (unbounded sequence) and "string name[10]" (fixed array)
         parts = line.split()
         if len(parts) < 2:
             continue
@@ -220,47 +212,35 @@ def _parse_msg_definition(msg_def: str) -> List[Dict]:
         field_type = parts[0]
         field_name = parts[1]
 
-        # Skip constants (format: type CONSTANT_NAME=value)
-        # Constants should not be included in the type hash calculation
-        if '=' in field_name:
-            continue
-
         # Check for array/sequence notation
+        # ROS2 .msg supports three formats:
+        #   float64[] name     - unbounded sequence (in type string)
+        #   float64[36] name   - fixed-size array (in type string)
+        #   float64[<=10] name - bounded sequence (in type string)
         is_array = False
         is_bounded = False
         array_size = 0
-
-        # First check: array notation in type name (e.g., "float64[9] name")
-        # This format is used in sensor_msgs/Imu.msg for covariance arrays
-        match = re.search(r'^(\w+)\[(\d+)\]$', field_type)
-        if match:
-            # Fixed-size array in type: "float64[9]" -> type="float64", size=9
-            field_type = match.group(1)
-            array_size = int(match.group(2))
+        if field_type.endswith('[]'):
+            # Unbounded sequence: float64[] -> UNBOUNDED_SEQUENCE
             is_array = True
             is_bounded = False
-        elif field_type.endswith('[]'):
-            # Unbounded sequence: string[] -> UNBOUNDED_SEQUENCE
+            field_type = field_type[:-2]
+        elif '[' in field_type and field_type.endswith(']'):
+            # Fixed-size array or bounded sequence in type string: float64[36] or float64[<=10]
+            bracket_start = field_type.index('[')
+            bracket_content = field_type[bracket_start + 1:-1]
+            base_type = field_type[:bracket_start]
             is_array = True
-            is_bounded = False
-            field_type = field_type[:-2]  # Remove [] from type name
-        elif len(parts) > 2:
-            # Check for array notation after field name (e.g., "string name[10]")
-            array_part = ' '.join(parts[2:])
-            if '[' in array_part and ']' in array_part:
-                is_array = True
-                # Check if it's a fixed-size array [10] or bounded sequence [<=10]
-                match = re.search(r'\[(\d+)\]', array_part)
-                if match:
-                    # Fixed-size array
-                    array_size = int(match.group(1))
-                    is_bounded = False
-                else:
-                    # Bounded sequence [<=10] - not common in .msg files but possible
-                    match = re.search(r'\[<=\s*(\d+)\]', array_part)
-                    if match:
-                        array_size = int(match.group(1))
-                        is_bounded = True
+            bound_match = re.match(r'<=\s*(\d+)', bracket_content)
+            if bound_match:
+                # Bounded sequence: float64[<=10]
+                array_size = int(bound_match.group(1))
+                is_bounded = True
+            else:
+                # Fixed-size array: float64[36]
+                array_size = int(bracket_content)
+                is_bounded = False
+            field_type = base_type
 
         fields.append({
             'name': field_name,
@@ -278,15 +258,9 @@ def _field_type_to_type_id(field_type: str, is_array: bool = False, is_bounded: 
     Convert ROS2 field type to field type ID.
 
     In ROS2 .msg files:
-    - Fixed-size arrays like `float64[9]` or `string name[10]` are ARRAY types
-    - Unbounded sequences like `string[]` are UNBOUNDED_SEQUENCE types
-    - Bounded sequences like `string[<=10]` are BOUNDED_SEQUENCE types
-
-    Args:
-        field_type: Base type name (e.g., 'float64', 'string')
-        is_array: True if this is an array/sequence
-        is_bounded: True if this is a bounded sequence
-        array_size: Size of the array (0 for unbounded sequences, >0 for fixed arrays)
+    - Fixed-size arrays like `float64[36]` are ARRAY types (array_size > 0, is_bounded=False)
+    - Unbounded sequences like `string[]` are UNBOUNDED_SEQUENCE types (array_size == 0, is_bounded=False)
+    - Bounded sequences like `string[<=10]` are BOUNDED_SEQUENCE types (is_bounded=True)
     """
     if field_type in PRIMITIVE_TO_FIELD_TYPE:
         type_name = PRIMITIVE_TO_FIELD_TYPE[field_type]
@@ -297,10 +271,8 @@ def _field_type_to_type_id(field_type: str, is_array: bool = False, is_bounded: 
         if is_bounded:
             type_name += '_BOUNDED_SEQUENCE'
         elif array_size > 0:
-            # Fixed-size array (e.g., float64[9])
             type_name += '_ARRAY'
         else:
-            # Unbounded sequence ([] syntax in .msg files)
             type_name += '_UNBOUNDED_SEQUENCE'
 
     return FIELD_TYPE_NAME_TO_ID.get(type_name, 0)
@@ -344,10 +316,30 @@ def _serialize_field(field: Dict, msg_type: str) -> Dict:
 
 
 def _serialize_type_description(msg_type: str, fields: List[Dict]) -> Dict:
-    """Serialize a message type to type description format"""
+    """Serialize a message type to type description format.
+
+    For empty message types (no fields), ROS2 adds a placeholder field called
+    'structure_needs_at_least_one_member' of type uint8 to ensure the struct
+    is not empty in C/C++.
+    """
+    serialized_fields = [_serialize_field(f, msg_type) for f in fields]
+
+    # Add placeholder for empty message types (ROS2 IDL requirement)
+    if not serialized_fields:
+        serialized_fields = [{
+            'name': 'structure_needs_at_least_one_member',
+            'type': {
+                'type_id': FIELD_TYPE_NAME_TO_ID['FIELD_TYPE_UINT8'],
+                'capacity': 0,
+                'string_capacity': 0,
+                'nested_type_name': '',
+            },
+            'default_value': '',
+        }]
+
     return {
         'type_name': msg_type,
-        'fields': [_serialize_field(f, msg_type) for f in fields],
+        'fields': serialized_fields,
     }
 
 
@@ -436,18 +428,6 @@ def compute_type_hash_from_msg(
         Type hash string in format RIHS01_<hash>
     """
     fields = _parse_msg_definition(msg_definition)
-
-    # Handle empty messages: IDL/DDS requires at least one member in a struct.
-    # ROS2's rosidl_adapter adds a dummy uint8 member for empty .msg files.
-    # We must do the same to match the type hash.
-    if not fields:
-        fields = [{
-            'name': EMPTY_STRUCTURE_REQUIRED_MEMBER_NAME,
-            'type': 'uint8',
-            'is_array': False,
-            'array_size': 0,
-        }]
-
     type_map = {}
     type_map[msg_type] = _serialize_type_description(msg_type, fields)
 
@@ -476,10 +456,9 @@ def get_type_hash(msg_type: str, msg_definition: Optional[str] = None, dependenc
         Type hash string in format RIHS01_<hash>
 
     Raises:
-        ValueError: If msg_definition is not provided (None)
+        ValueError: If msg_definition is not provided
     """
-    # Allow empty string as valid definition (for messages with no fields like std_msgs/msg/Empty)
-    if msg_definition is None:
+    if not msg_definition:
         raise ValueError(
             f"Message definition is required to compute type hash for {msg_type}. "
             "Please provide msg_definition or use the message registry to load the type."
@@ -518,7 +497,7 @@ def compute_service_type_hash(
     parts = srv_type.split("/")
     if len(parts) != 3:
         raise ValueError(f"Invalid service type format: {srv_type}")
-
+    
     # Validate that definitions are provided
     if not request_definition or not request_definition.strip():
         raise ValueError(f"Service definition is required for request. Service type: {srv_type}")
@@ -748,7 +727,7 @@ def slotted_dataclass(cls=None, /, *, frozen=False, **kwargs):
     """
     if sys.version_info >= (3, 10):
         kwargs["slots"] = True
-
+    
     def wrap(cls):
         return dataclass(cls, frozen=frozen, **kwargs)
 

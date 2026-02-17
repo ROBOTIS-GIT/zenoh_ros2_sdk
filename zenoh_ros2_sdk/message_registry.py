@@ -203,9 +203,21 @@ class MessageRegistry:
         request_definition = parts[0].strip()
         response_definition = parts[1].strip()
 
-        if not request_definition:
-            raise ValueError(f"Empty request definition in service file for {srv_type}")
-        if not response_definition:
+        # Filter out comment-only lines to get actual field definitions
+        def has_fields(definition: str) -> bool:
+            """Check if definition has actual field definitions (not just comments)."""
+            for line in definition.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    return True
+            return False
+
+        # ROS2 allows empty request/response definitions
+        # Use a placeholder for empty definitions to satisfy the message type system
+        if not has_fields(request_definition):
+            # Empty request - use minimal placeholder that serializes to empty bytes
+            request_definition = "# Empty request"
+        if not has_fields(response_definition):
             raise ValueError(f"Empty response definition in service file for {srv_type}")
 
         # Extract dependencies for request and response
@@ -344,8 +356,7 @@ class MessageRegistry:
                 # Check if it's a custom type (not a primitive)
                 primitives = ['bool', 'int8', 'uint8', 'int16', 'uint16',
                             'int32', 'uint32', 'int64', 'uint64',
-                            'float32', 'float64', 'string', 'time', 'duration',
-                            'byte', 'char', 'wchar', 'wstring', 'octet']
+                            'float32', 'float64', 'string', 'time', 'duration']
 
                 if base_type not in primitives and not base_type.startswith('['):
                     # Resolve namespace
