@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from zenoh_ros2_sdk.utils import (
     ros2_to_dds_type, get_type_hash, mangle_name, compute_type_hash_from_msg,
-    compute_service_type_hash, resolve_domain_id
+    compute_service_type_hash, resolve_domain_id, dds_to_ros_type, demangle_name
 )
 from zenoh_ros2_sdk.message_registry import get_registry
 
@@ -187,6 +187,33 @@ class TestMangleName:
     def test_no_slash(self):
         """Test mangling name without slashes"""
         assert mangle_name("chatter") == "chatter"
+
+
+class TestDemangleName:
+    """Tests for name demangling (inverse of mangle_name)"""
+
+    def test_simple_topic(self):
+        assert demangle_name("%chatter") == "/chatter"
+
+    def test_nested_topic(self):
+        assert demangle_name("%robot%sensor%data") == "/robot/sensor/data"
+
+    def test_root(self):
+        assert demangle_name("%") == "/"
+        assert demangle_name("") == "/"
+
+    def test_no_percent(self):
+        assert demangle_name("chatter") == "/chatter"
+
+
+class TestDdsToRosType:
+    """Tests for DDS to ROS2 type conversion (inverse of ros2_to_dds_type)"""
+
+    def test_std_msgs_string(self):
+        assert dds_to_ros_type("std_msgs::msg::dds_::String_") == "std_msgs/msg/String"
+
+    def test_geometry_twist(self):
+        assert dds_to_ros_type("geometry_msgs::msg::dds_::Twist_") == "geometry_msgs/msg/Twist"
 
 
 class TestServiceTypeHash:

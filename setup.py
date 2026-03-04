@@ -44,4 +44,9 @@ setup(
             "flake8>=4.0.0",
         ],
     },
+    entry_points={
+        "console_scripts": [
+            "zenoh-ros2=zenoh_ros2_sdk.cli:main",
+        ],
+    },
 )

@@ -8,6 +8,12 @@ from .subscriber import ROS2Subscriber
 from .service_client import ROS2ServiceClient
 from .service_server import ROS2ServiceServer
 from .message_registry import MessageRegistry, load_message_type, get_message_class, get_registry, load_service_type
+from .discovery import (
+    get_topic_names_and_types,
+    get_topic_info,
+    TopicInfo,
+    TopicEndpointInfo,
+)
 from .logger import get_logger
 
 __version__ = "0.1.6"
@@ -22,5 +28,9 @@ __all__ = [
     "load_service_type",
     "get_message_class",
     "get_registry",
+    "get_topic_names_and_types",
+    "get_topic_info",
+    "TopicInfo",
+    "TopicEndpointInfo",
     "get_logger",
 ]

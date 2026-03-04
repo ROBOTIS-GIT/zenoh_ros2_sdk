@@ -40,6 +40,7 @@ sub = ROS2Subscriber(
 ## Where to go next
 
 - **Getting Started**: installation, running a router, pub/sub and services (`getting-started.md`)
+- **Topic list / topic info**: `zenoh-ros2` CLI and discovery API (`TOPIC_LIST_AND_INFO.md`)
 - **Concepts**: domain IDs, discovery tokens, key expressions, QoS (`concepts.md`)
 - **Examples**: runnable scripts you can copy/paste (`examples.md`)
 - **API Reference**: full API from docstrings (`api/index.md`)

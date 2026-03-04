@@ -152,6 +152,15 @@ Demonstrates how to subscribe to `std_msgs/msg/Empty` messages and react to trig
 python3 examples/18_subscribe_empty.py
 ```
 
+### [`19_discovery_topic_list.py`](19_discovery_topic_list.py)
+Demonstrates the discovery API: list all topics (with types) and show verbose info for a topic. Equivalent to `zenoh-ros2 topic list -t` and `zenoh-ros2 topic info -v TOPIC`.
+
+**Usage:**
+```bash
+python3 examples/19_discovery_topic_list.py              # list topics, then info for first topic
+python3 examples/19_discovery_topic_list.py /chatter     # list topics, then info for /chatter
+```
+
 ## Running Examples
 
 Make sure you have:

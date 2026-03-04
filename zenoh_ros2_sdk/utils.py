@@ -197,6 +197,18 @@ def ros2_to_dds_type(ros2_type: str) -> str:
     return ros2_type.replace("/", "::")
 
 
+def dds_to_ros_type(dds_type: str) -> str:
+    """Convert DDS type name to ROS2 type name (inverse of ros2_to_dds_type)."""
+    parts = dds_type.split("::")
+    if len(parts) >= 4:
+        # e.g. std_msgs::msg::dds_::String_ -> std_msgs/msg/String
+        namespace = parts[0]
+        msg_or_srv = parts[1]
+        name = parts[3].rstrip("_")
+        return f"{namespace}/{msg_or_srv}/{name}"
+    return dds_type.replace("::", "/")
+
+
 def _parse_msg_definition(msg_def: str) -> List[Dict]:
     """Parse a .msg file definition into field structures."""
     fields = []
@@ -690,6 +702,23 @@ def mangle_name(name: str) -> str:
     if not name or name == "/":
         return "%"
     return name.replace("/", "%")
+
+
+def demangle_name(mangled: str) -> str:
+    """Demangle a name by replacing % with /; result is normalized to start with / for topic names."""
+    if not mangled or mangled == "%":
+        return "/"
+    out = mangled.replace("%", "/")
+    if out and not out.startswith("/"):
+        out = "/" + out
+    return out
+
+
+def demangle_name_optional_leading_slash(mangled: str) -> str:
+    """Demangle by replacing % with / only; do not add leading /. Use for node names and namespaces."""
+    if not mangled or mangled == "%":
+        return "/"
+    return mangled.replace("%", "/")
 
 
 def load_dependencies_recursive(
