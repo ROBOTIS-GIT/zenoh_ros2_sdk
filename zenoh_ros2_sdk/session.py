@@ -14,6 +14,10 @@ from .logger import get_logger
 
 logger = get_logger("session")
 
+# Path to rmw_zenoh default session config (ros2/rmw_zenoh DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5)
+_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_RMW_ZENOH_CONFIG_PATH = os.path.join(_PKG_DIR, "config", "DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5")
+
 
 def _parse_zenoh_config_override(override: str) -> list[tuple[str, str]]:
     """
@@ -85,8 +89,15 @@ class ZenohSession:
     def __init__(self, router_ip: str = "127.0.0.1", router_port: int = 7447):
         self.router_ip = router_ip
         self.router_port = router_port
-        self.conf = zenoh.Config()
-        # Defaults (can be overridden via ZENOH_CONFIG_OVERRIDE)
+        # Load rmw_zenoh default session config if present, else empty config
+        if os.path.isfile(_DEFAULT_RMW_ZENOH_CONFIG_PATH):
+            self.conf = zenoh.Config.from_file(_DEFAULT_RMW_ZENOH_CONFIG_PATH)
+            logger.debug(
+                "Loaded Zenoh config from %s", _DEFAULT_RMW_ZENOH_CONFIG_PATH
+            )
+        else:
+            self.conf = zenoh.Config()
+        # Override connect/endpoints with router address (and ZENOH_CONFIG_OVERRIDE can override again)
         self.conf.insert_json5(
             "connect/endpoints", f'["tcp/{router_ip}:{router_port}"]'
         )
