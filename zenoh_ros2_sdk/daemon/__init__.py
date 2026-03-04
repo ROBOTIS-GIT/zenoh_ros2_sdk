@@ -1,7 +1,7 @@
 """
 zenoh-ros2 daemon: HTTP server holding one Zenoh session for fast topic list/info.
 
-Port: 11512 + ROS_DOMAIN_ID. Bind 127.0.0.1. Serves JSON over HTTP.
+Port: 11620 + ROS_DOMAIN_ID (avoids ros2 daemon 11511+domain_id). Bind 127.0.0.1. Serves JSON over HTTP.
 """
 
 from __future__ import annotations
@@ -26,14 +26,14 @@ def get_domain_id() -> int:
 
 
 def get_port(domain_id: Optional[int] = None) -> int:
-    """Daemon port: 11512 + domain_id."""
+    """Daemon port: 11620 + domain_id (avoids ros2 daemon 11511+domain_id)."""
     if domain_id is None:
         domain_id = get_domain_id()
-    return 11512 + domain_id
+    return 11620 + domain_id
 
 
 def get_base_url(domain_id: Optional[int] = None) -> str:
-    """Base URL for daemon (e.g. http://127.0.0.1:11512)."""
+    """Base URL for daemon (e.g. http://127.0.0.1:11620)."""
     return f"http://127.0.0.1:{get_port(domain_id)}"
 
 

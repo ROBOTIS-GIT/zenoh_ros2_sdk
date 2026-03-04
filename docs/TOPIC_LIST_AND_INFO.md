@@ -46,7 +46,7 @@ Same liveliness queries are used; for a given topic we filter by normalized topi
 
 - `zenoh_ros2_sdk/utils.py`: `dds_to_ros_type()`, `demangle_name()`.
 - `zenoh_ros2_sdk/discovery.py`: `get_topic_names_and_types()`, `get_topic_info()`, `TopicInfo`, `TopicEndpointInfo`, and liveliness parsing.
-- `zenoh_ros2_sdk/daemon/`: HTTP daemon (port 11512 + ROS_DOMAIN_ID), `zenoh-ros2 daemon start|stop|status`. When the daemon is running, topic list/info use it and return quickly.
+- `zenoh_ros2_sdk/daemon/`: HTTP daemon (port 11620 + ROS_DOMAIN_ID; avoids ros2 daemon 11511+domain_id), `zenoh-ros2 daemon start|stop|status`. When the daemon is running, topic list/info use it and return quickly.
 - `zenoh_ros2_sdk/node/`: `NodeStrategy` (daemon vs direct), `DirectNode`.
 - `zenoh_ros2_sdk/topic_cli.py`: topic list/info handlers (invoked via `zenoh-ros2 topic`).
 - `zenoh_ros2_sdk/cli.py`: main `zenoh-ros2` entry point.
