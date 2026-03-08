@@ -13,6 +13,10 @@ from .discovery import (
     get_topic_info,
     TopicInfo,
     TopicEndpointInfo,
+    get_service_names_and_types,
+    get_service_info,
+    ServiceInfo,
+    ServiceEndpointInfo,
 )
 from .logger import get_logger
 
@@ -32,5 +36,9 @@ __all__ = [
     "get_topic_info",
     "TopicInfo",
     "TopicEndpointInfo",
+    "get_service_names_and_types",
+    "get_service_info",
+    "ServiceInfo",
+    "ServiceEndpointInfo",
     "get_logger",
 ]

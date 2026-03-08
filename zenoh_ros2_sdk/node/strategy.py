@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from zenoh_ros2_sdk.daemon.client import (
     get_topic_list as daemon_get_topic_list,
     get_topic_info as daemon_get_topic_info,
+    get_service_list as daemon_get_service_list,
+    get_service_info as daemon_get_service_info,
     is_daemon_running,
 )
 from zenoh_ros2_sdk.daemon.spawn import spawn_daemon
@@ -112,6 +114,45 @@ class NodeStrategy:
             )
         return self._get_direct().get_topic_info(
             topic_name,
+            domain_id=self.domain_id,
+            timeout=timeout,
+            verbose=verbose,
+        )
+
+    def get_service_names_and_types(
+        self,
+        timeout: float = 0.5,
+        include_hidden_services: bool = False,
+    ) -> List[Tuple[str, List[str]]]:
+        """Unified service discovery: list of (service_name, [type1, type2, ...])."""
+        if self._resolve():
+            return daemon_get_service_list(
+                domain_id=self.domain_id,
+                timeout=timeout,
+                include_hidden=include_hidden_services,
+            )
+        return self._get_direct().get_service_names_and_types(
+            domain_id=self.domain_id,
+            timeout=timeout,
+            include_hidden_services=include_hidden_services,
+        )
+
+    def get_service_info(
+        self,
+        service_name: str,
+        timeout: float = 0.5,
+        verbose: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Unified: dict or None if service is not found."""
+        if self._resolve():
+            return daemon_get_service_info(
+                service_name,
+                domain_id=self.domain_id,
+                timeout=timeout,
+                verbose=verbose,
+            )
+        return self._get_direct().get_service_info(
+            service_name,
             domain_id=self.domain_id,
             timeout=timeout,
             verbose=verbose,

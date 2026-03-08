@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import topic_cli
+from . import topic_cli, service_cli
 from .daemon.client import is_daemon_running, shutdown_daemon
 from .daemon.spawn import spawn_daemon
 from .utils import resolve_domain_id
@@ -107,6 +107,26 @@ def main() -> int:
     pinfo.add_argument("topic_name", nargs="?", help="Topic name (e.g. /chatter)")
     pinfo.add_argument("-v", "--verbose", action="store_true", help="Print detailed publisher/subscriber info")
     pinfo.set_defaults(func=topic_cli.cmd_info)
+
+    # service subcommand
+    service_p = sub.add_parser("service", help="Service-related commands (list, type)")
+    service_sub = service_p.add_subparsers(dest="service_command", required=True)
+
+    # service list
+    slist = service_sub.add_parser("list", help="List services (ros2 service list)")
+    slist.add_argument("-t", "--show-types", action="store_true", help="Show service types")
+    slist.add_argument("-c", "--count-services", action="store_true", help="Only print number of services")
+    slist.add_argument(
+        "--include-hidden-services",
+        action="store_true",
+        help="Include hidden services (default: exclude)",
+    )
+    slist.set_defaults(func=service_cli.cmd_list)
+
+    # service type
+    stype = service_sub.add_parser("type", help="Service type (ros2 service type)")
+    stype.add_argument("service_name", nargs="?", help="Service name (e.g. /add_two_ints)")
+    stype.set_defaults(func=service_cli.cmd_type)
 
     args = parser.parse_args()
     # Apply ROS_DOMAIN_ID when --domain-id not set (ros2cli behavior)

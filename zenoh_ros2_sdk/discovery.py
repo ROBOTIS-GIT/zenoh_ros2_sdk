@@ -56,7 +56,12 @@ def _parse_liveliness_keyexpr(key_expr: str) -> Optional[dict]:
     if len(parts) < _MIN_PARTS or parts[0] != ADMIN_SPACE:
         return None
     kind = parts[_IDX_KIND]
-    if kind not in (EntityKind.PUBLISHER.value, EntityKind.SUBSCRIPTION.value):
+    if kind not in (
+        EntityKind.PUBLISHER.value,
+        EntityKind.SUBSCRIPTION.value,
+        EntityKind.SERVICE.value,
+        EntityKind.CLIENT.value,
+    ):
         return None
     try:
         return {
@@ -236,5 +241,124 @@ def get_topic_info(
         subscriber_count=sub_count,
         publishers=publishers,
         subscribers=subscribers,
+    )
+
+
+@dataclass
+class ServiceEndpointInfo:
+    """Verbose info for one service server or client (ros2 service-style verbose info)."""
+
+    node_name: str
+    node_namespace: str
+    service_type: str
+    type_hash: str
+    qos: str
+    gid: Optional[str] = None  # optional; not always in token
+
+
+@dataclass
+class ServiceInfo:
+    """Result of get_service_info (service discovery info)."""
+
+    service_name: str
+    service_types: List[str]
+    server_count: int
+    client_count: int
+    servers: List[ServiceEndpointInfo] = field(default_factory=list)
+    clients: List[ServiceEndpointInfo] = field(default_factory=list)
+
+
+def get_service_names_and_types(
+    domain_id: Optional[int] = None,
+    router_ip: str = "127.0.0.1",
+    router_port: int = 7447,
+    timeout: float = 0.5,
+    include_hidden_services: bool = False,
+) -> List[Tuple[str, List[str]]]:
+    """
+    List all services and their types (like `ros2 service list` / `ros2 service list -t`).
+
+    Discovers services by querying Zenoh liveliness for SS (service server) and SC
+    (service client) tokens in the given domain. Returns a list of
+    (service_name, [type1, type2, ...]) with types in ROS 2 form
+    (e.g. example_interfaces/srv/AddTwoInts).
+    """
+    domain_id = resolve_domain_id(domain_id)
+    session = ZenohSession.get_instance(router_ip, router_port)
+
+    service_types: dict[str, set[str]] = {}
+
+    for kind in (EntityKind.SERVICE.value, EntityKind.CLIENT.value):
+        for parsed in _query_liveliness(session, domain_id, kind, timeout):
+            name = parsed["qualified_name"]
+            if not name or name == "/":
+                continue
+            if not include_hidden_services and name.startswith("/_"):
+                continue
+            ros_type = dds_to_ros_type(parsed["dds_type"])
+            service_types.setdefault(name, set()).add(ros_type)
+
+    return [(svc, sorted(types)) for svc, types in sorted(service_types.items())]
+
+
+def get_service_info(
+    service_name: str,
+    domain_id: Optional[int] = None,
+    router_ip: str = "127.0.0.1",
+    router_port: int = 7447,
+    timeout: float = 0.5,
+    verbose: bool = False,
+) -> Optional[ServiceInfo]:
+    """
+    Get info for a single service (discovery-only; server/client counts and types).
+    """
+    domain_id = resolve_domain_id(domain_id)
+    session = ZenohSession.get_instance(router_ip, router_port)
+
+    # Normalize service name: ensure leading /
+    service_normalized = service_name if service_name.startswith("/") else "/" + service_name
+
+    servers: List[ServiceEndpointInfo] = []
+    clients: List[ServiceEndpointInfo] = []
+    types_seen: set[str] = set()
+    server_count = 0
+    client_count = 0
+
+    for kind in (EntityKind.SERVICE.value, EntityKind.CLIENT.value):
+        for parsed in _query_liveliness(session, domain_id, kind, timeout):
+            name = parsed["qualified_name"]
+            if not name or name == "/":
+                continue
+            name_norm = name if name.startswith("/") else "/" + name
+            if name_norm != service_normalized:
+                continue
+            ros_type = dds_to_ros_type(parsed["dds_type"])
+            types_seen.add(ros_type)
+            endpoint = ServiceEndpointInfo(
+                node_name=parsed["node_name"],
+                node_namespace=parsed["namespace"],
+                service_type=ros_type,
+                type_hash=parsed["type_hash"],
+                qos=parsed["qos"],
+            )
+            if kind == EntityKind.SERVICE.value:
+                server_count += 1
+                if verbose:
+                    servers.append(endpoint)
+            else:
+                client_count += 1
+                if verbose:
+                    clients.append(endpoint)
+
+    if not types_seen and server_count == 0 and client_count == 0:
+        return None
+
+    return ServiceInfo(
+        service_name=service_normalized,
+        service_types=sorted(types_seen),
+        server_count=server_count,
+        client_count=client_count,
+        servers=servers,
+        clients=clients,
     )
 

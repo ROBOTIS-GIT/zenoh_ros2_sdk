@@ -16,7 +16,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
-from zenoh_ros2_sdk import ZenohSession, get_topic_info, get_topic_names_and_types
+from zenoh_ros2_sdk import (
+    ZenohSession,
+    get_topic_info,
+    get_topic_names_and_types,
+    get_service_names_and_types,
+    get_service_info,
+)
 
 
 def get_domain_id() -> int:
@@ -68,6 +74,36 @@ def _topic_info_to_dict(info) -> dict:
                 "qos": s.qos,
             }
             for s in info.subscribers
+        ],
+    }
+
+
+def _service_info_to_dict(info) -> dict:
+    """Convert ServiceInfo to JSON-serializable dict."""
+    return {
+        "service_name": info.service_name,
+        "service_types": info.service_types,
+        "server_count": info.server_count,
+        "client_count": info.client_count,
+        "servers": [
+            {
+                "node_name": s.node_name,
+                "node_namespace": s.node_namespace,
+                "service_type": s.service_type,
+                "type_hash": s.type_hash,
+                "qos": s.qos,
+            }
+            for s in info.servers
+        ],
+        "clients": [
+            {
+                "node_name": c.node_name,
+                "node_namespace": c.node_namespace,
+                "service_type": c.service_type,
+                "type_hash": c.type_hash,
+                "qos": c.qos,
+            }
+            for c in info.clients
         ],
     }
 
@@ -169,6 +205,52 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 self._send_error_json(str(e), status=500)
             return
 
+        if path == "/service/list":
+            domain_id = get_one("domain_id")
+            domain_id = int(domain_id) if domain_id is not None else get_domain_id()
+            timeout = get_one("timeout", "0.5")
+            timeout = float(timeout) if timeout else 0.5
+            include_hidden = get_one("include_hidden", "").lower() in ("1", "true", "yes")
+            try:
+                services = get_service_names_and_types(
+                    domain_id=domain_id,
+                    router_ip=DEFAULT_ROUTER_IP,
+                    router_port=DEFAULT_ROUTER_PORT,
+                    timeout=timeout,
+                    include_hidden_services=include_hidden,
+                )
+                self._send_json({"services": services})
+            except Exception as e:
+                self._send_error_json(str(e), status=500)
+            return
+
+        if path == "/service/info":
+            service_name = get_one("service_name")
+            if not service_name:
+                self._send_error_json("service_name required", status=400)
+                return
+            timeout = get_one("timeout", "0.5")
+            timeout = float(timeout) if timeout else 0.5
+            verbose = get_one("verbose", "").lower() in ("1", "true", "yes")
+            domain_id = get_one("domain_id")
+            domain_id = int(domain_id) if domain_id is not None else get_domain_id()
+            try:
+                info = get_service_info(
+                    service_name,
+                    domain_id=domain_id,
+                    router_ip=DEFAULT_ROUTER_IP,
+                    router_port=DEFAULT_ROUTER_PORT,
+                    timeout=timeout,
+                    verbose=verbose,
+                )
+                if info is None:
+                    self._send_json(None)
+                else:
+                    self._send_json(_service_info_to_dict(info))
+            except Exception as e:
+                self._send_error_json(str(e), status=500)
+            return
+
         self._send_error_json("Not Found", status=404)
 
     def do_POST(self):
@@ -229,6 +311,52 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 self._send_error_json(str(e), status=500)
             return
 
+        if path == "/service/list":
+            domain_id = body.get("domain_id")
+            if domain_id is None:
+                domain_id = get_domain_id()
+            timeout = body.get("timeout", 0.5)
+            include_hidden = body.get("include_hidden", False)
+            try:
+                services = get_service_names_and_types(
+                    domain_id=domain_id,
+                    router_ip=DEFAULT_ROUTER_IP,
+                    router_port=DEFAULT_ROUTER_PORT,
+                    timeout=float(timeout),
+                    include_hidden_services=bool(include_hidden),
+                )
+                self._send_json({"services": services})
+            except Exception as e:
+                self._send_error_json(str(e), status=500)
+            return
+
+        if path == "/service/info":
+            service_name = body.get("service_name")
+            if not service_name:
+                self._send_error_json("service_name required", status=400)
+                return
+            timeout = body.get("timeout", 0.5)
+            verbose = body.get("verbose", False)
+            domain_id = body.get("domain_id")
+            if domain_id is None:
+                domain_id = get_domain_id()
+            try:
+                info = get_service_info(
+                    service_name,
+                    domain_id=domain_id,
+                    router_ip=DEFAULT_ROUTER_IP,
+                    router_port=DEFAULT_ROUTER_PORT,
+                    timeout=float(timeout),
+                    verbose=bool(verbose),
+                )
+                if info is None:
+                    self._send_json(None)
+                else:
+                    self._send_json(_service_info_to_dict(info))
+            except Exception as e:
+                self._send_error_json(str(e), status=500)
+            return
+
         self._send_error_json("Not Found", status=404)
 
 
@@ -239,7 +367,7 @@ def serve(
 ) -> None:
     """
     Run the daemon HTTP server. Creates one ZenohSession (default router) and serves
-    /health, /topic/list, /topic/info, /shutdown.
+    /health, /topic/list, /topic/info, /service/list, /service/info, /shutdown.
     """
     if port is None:
         port = get_port()

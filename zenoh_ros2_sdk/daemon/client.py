@@ -68,6 +68,58 @@ def get_topic_info(
     return data
 
 
+def get_service_list(
+    domain_id: Optional[int] = None,
+    timeout: float = 0.5,
+    include_hidden: bool = False,
+) -> List[Tuple[str, List[str]]]:
+    """
+    GET /service/list from daemon. Returns list of (service_name, [type1, type2, ...]).
+    Raises on connection error or non-2xx.
+    """
+    if domain_id is None:
+        domain_id = get_domain_id()
+    base = get_base_url(domain_id)
+    url = (
+        f"{base}/service/list?domain_id={domain_id}"
+        f"&timeout={timeout}"
+        f"&include_hidden={'true' if include_hidden else 'false'}"
+    )
+    req = Request(url, method="GET")
+    with urlopen(req, timeout=max(3, timeout + 2)) as r:
+        if r.getcode() != 200:
+            raise RuntimeError(f"Daemon returned {r.getcode()}")
+        data = json.loads(r.read().decode("utf-8"))
+    return data.get("services", [])
+
+
+def get_service_info(
+    service_name: str,
+    domain_id: Optional[int] = None,
+    timeout: float = 0.5,
+    verbose: bool = False,
+) -> Optional[dict]:
+    """
+    GET /service/info from daemon. Returns dict or None if service not found.
+    Raises on connection error or non-2xx (except 200 with null body).
+    """
+    if domain_id is None:
+        domain_id = get_domain_id()
+    base = get_base_url(domain_id)
+    url = (
+        f"{base}/service/info?service_name={quote(service_name, safe='/')}"
+        f"&domain_id={domain_id}&timeout={timeout}"
+        f"&verbose={'true' if verbose else 'false'}"
+    )
+    req = Request(url, method="GET")
+    with urlopen(req, timeout=max(3, timeout + 2)) as r:
+        if r.getcode() != 200:
+            raise RuntimeError(f"Daemon returned {r.getcode()}")
+        raw = r.read().decode("utf-8")
+        data = json.loads(raw)
+    return data
+
+
 def shutdown_daemon(domain_id: Optional[int] = None) -> None:
     """POST /shutdown. Does not wait for daemon process to exit."""
     base = get_base_url(domain_id)
