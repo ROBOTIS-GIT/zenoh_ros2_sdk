@@ -17,15 +17,11 @@ So the process blocks in **session.close()** (or in the equivalent cleanup when 
 
 ### Where the 10 s is defined in Zenoh (eclipse-zenoh/zenoh)
 
-Clone and inspect:
-
-```bash
-git clone --depth 1 https://github.com/eclipse-zenoh/zenoh.git deps/zenoh
-```
+In the upstream `eclipse-zenoh/zenoh` repository:
 
 **1. Close timeout (10 s default)**
 
-- **File:** `deps/zenoh/zenoh/src/api/builders/close.rs`
+- **File:** `zenoh/src/api/builders/close.rs`
 - **Line 47:** `timeout: Duration::from_secs(10),`
 - **Lines 119–124:** The close future runs as  
   `tokio::time::timeout(self.timeout, self.closee.close_inner(self.close_args))`  
@@ -35,14 +31,14 @@ So the **maximum** wait for a single close is **10 s**, and that matches what we
 
 **2. What actually runs during close**
 
-- **File:** `deps/zenoh/zenoh/src/api/session.rs`
+- **File:** `zenoh/src/api/session.rs`
 - **Lines 3489–3528:** `impl Closee for WeakSession` → `close_inner`:
   - Takes primitives from state
   - `task_controller.terminate_all_async().await`
   - `primitives.send_close()` (or runtime’s `close_inner` when using static runtime)
   - Drops session state (queryables, subscribers, etc.)
 
-- **File:** `deps/zenoh/zenoh/src/net/runtime/mod.rs`
+- **File:** `zenoh/src/net/runtime/mod.rs`
 - **Lines 983–1003:** `impl Closee for Arc<RuntimeState>` → `close_inner`:
   - `task_controller.terminate_all_async().await`
   - **`self.manager.close().await`** ← transport/link shutdown

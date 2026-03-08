@@ -12,8 +12,8 @@ When a process that only uses discovery (e.g. `get_topic_names_and_types`, `get_
 
 | Your case | What to do |
 |-----------|------------|
-| **Discovery only** (topic list, topic info, type-hash checks, one-off scripts) | Run discovery via the **daemon**: `zenoh-ros2 daemon start`. Then `zenoh-ros2 topic list` / `topic info` and scripts that use the daemon don’t own a Zenoh session → no panic, no 10s delay. See [DISCOVERY_CLOSE_DELAY.md](DISCOVERY_CLOSE_DELAY.md). |
-| **Discovery from your own Python script** | Use **NodeStrategy** (daemon path), not the raw `get_topic_names_and_types` / `get_topic_info`. With the daemon running (or auto-spawned), the strategy talks to the daemon over HTTP and your process does **not** open a Zenoh session → no 10s delay, no panic. Example: `NodeStrategy().get_topic_names_and_types()` (default router; start daemon first or leave `spawn_if_missing=True`). |
+| **Discovery only** (topic list, topic info, service list/type, type-hash checks, one-off scripts) | Run discovery via the **daemon**: `zenoh-ros2 daemon start`. Then `zenoh-ros2 topic list` / `topic info` / `service list` / `service type` and scripts that use the daemon don’t own a Zenoh session → no panic, no 10s delay. See [DISCOVERY_CLOSE_DELAY.md](DISCOVERY_CLOSE_DELAY.md). |
+| **Discovery from your own Python script** | Use **NodeStrategy** (daemon path), not the raw `get_topic_names_and_types` / `get_topic_info` / `get_service_names_and_types` / `get_service_info`. With the daemon running (or auto-spawned), the strategy talks to the daemon over HTTP and your process does **not** open a Zenoh session → no 10s delay, no panic. Example: `NodeStrategy().get_topic_names_and_types()` or `NodeStrategy().get_service_names_and_types()` (default router; start daemon first or leave `spawn_if_missing=True`). |
 | **Pub/sub** (subscriber, publisher examples) | Nothing special. They exit without an extra delay. No atexit close is registered. |
 | **You want to close the session yourself** | Call `ZenohSession.get_instance(router_ip, router_port).close()` and catch `zenoh.ZError`. It may block up to 10s. |
 

@@ -70,6 +70,17 @@ Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This exam
 python3 examples/08_service_client.py
 ```
 
+You can also use these examples together with the CLI service discovery commands:
+
+```bash
+# In one terminal: start the router and daemon, then run the service server
+python3 examples/07_service_server.py
+
+# In another terminal: list services and show the AddTwoInts service type
+zenoh-ros2 service list -t
+zenoh-ros2 service type /add_two_ints
+```
+
 ### [`09_subscribe_compressed_image.py`](09_subscribe_compressed_image.py)
 Demonstrates how to subscribe to `sensor_msgs/msg/CompressedImage` messages (camera stream example; ZED topic by default).
 

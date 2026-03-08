@@ -1,6 +1,6 @@
 # ros2 topic list and ros2 topic info -v
 
-This document describes the **zenoh-ros2-sdk** implementation of `ros2 topic list` and `ros2 topic info -v`-style discovery without a ROS 2 environment.
+This document describes the **zenoh-ros2-sdk** implementation of `ros2 topic list` / `ros2 topic info -v`-style **topic discovery**, and the matching `ros2 service list` / `ros2 service type`-style **service discovery**, without a ROS 2 environment.
 
 ## What this project is
 
@@ -13,7 +13,7 @@ This document describes the **zenoh-ros2-sdk** implementation of `ros2 topic lis
 
 The SDK talks to a Zenoh router (e.g. `rmw_zenohd`). Discovery uses **liveliness tokens** under the admin space `@ros2_lv/...`, following the same format as **rmw_zenoh_cpp** and **ros-z** (ZettaScale). So any endpoint that declares these tokens (this SDK, ros-z nodes, or ROS 2 nodes via rmw_zenoh) appears in the same “ROS graph” over Zenoh.
 
-## Implemented behavior
+## Implemented behavior (topics)
 
 ### 1. ros2 topic list
 
@@ -37,9 +37,32 @@ Discovery is implemented by querying Zenoh liveliness for **MP** (publisher) and
 
 Same liveliness queries are used; for a given topic we filter by normalized topic name and optionally collect per-endpoint details.
 
-## Reference repos (cloned under `deps/`)
+## Implemented behavior (services)
 
-- **ros2cli**: https://github.com/ros2/ros2cli — reference for `ros2 topic list` / `ros2 topic info` behavior and output format.
+### 3. ros2 service list / ros2 service list -t
+
+- **API**: `get_service_names_and_types(domain_id=None, router_ip=\"127.0.0.1\", router_port=7447, timeout=0.5, include_hidden_services=False)`
+  - **Returns**: `List[Tuple[str, List[str]]]` — each item is `(service_name, [type1, type2, ...])` with types in ROS 2 form (e.g. `example_interfaces/srv/AddTwoInts`).
+  - `timeout` and `domain_id` semantics match the topic discovery helpers.
+- **CLI**: `zenoh-ros2 service list`
+  - **Options**: `-t` / `--show-types`, `-c` / `--count-services`, `--include-hidden-services`.
+  - **Global options** (before `service`): `--router`, `--domain-id`, `--timeout`, `--no-daemon`.
+
+Service discovery is implemented by querying Zenoh liveliness for **SS** (service server) and **SC** (service client) tokens in the given domain and aggregating by service name and type.
+
+### 4. ros2 service type
+
+- **API**: `get_service_info(service_name, domain_id=None, router_ip=..., router_port=..., timeout=0.5, verbose=False)`
+  - **Returns**: `ServiceInfo | None` with:
+    - `service_name`, `service_types`, `server_count`, `client_count`
+    - If `verbose=True`: `servers` and `clients` as lists of `ServiceEndpointInfo` (node name, namespace, service type, type hash, QoS).
+- **CLI**: `zenoh-ros2 service type SERVICE`
+
+As with topics, the SDK normalizes names to start with `/` and filters liveliness entries by qualified name. Verbose service info is primarily useful for debugging, while `service type` is focused on printing just the type string(s) like `ros2 service type`.
+
+## Reference repos
+
+- **ros2cli**: https://github.com/ros2/ros2cli — reference for `ros2 topic list` / `ros2 topic info` and `ros2 service list` / `ros2 service type` behavior and output format.
 - **ros-z**: https://github.com/ZettaScaleLabs/ros-z — parent / reference for rmw_zenoh and liveliness conventions used by this SDK.
 
 ## Files

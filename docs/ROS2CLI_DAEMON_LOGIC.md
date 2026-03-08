@@ -1,21 +1,21 @@
-# ros2cli daemon — exact logic (from deps/ros2cli)
+# ros2cli daemon — exact logic
 
-This document describes how the ROS 2 CLI daemon works, by pointing to the exact code in `deps/ros2cli`. Use it as a reference when implementing a daemon for `zenoh-ros2`.
+This document describes how the ROS 2 CLI daemon works, by pointing to the code in the upstream **ros2cli** repository. Use it as a reference when implementing a daemon for `zenoh-ros2`.
 
 ---
 
 ## 1. Protocol: XML-RPC over HTTP (TCP)
 
 - **Not** raw HTTP REST; the CLI talks to the daemon via **XML-RPC**.
-- **Client:** stdlib `xmlrpc.client.ServerProxy` (re-exported in [ros2cli/xmlrpc/client.py](deps/ros2cli/ros2cli/ros2cli/xmlrpc/client.py)).
-- **Server:** [ros2cli/xmlrpc/local_server.py](deps/ros2cli/ros2cli/ros2cli/xmlrpc/local_server.py) — `LocalXMLRPCServer` extends `xmlrpc.server.SimpleXMLRPCServer`, binds to `127.0.0.1`, and only accepts requests from local IPs (`verify_request` checks `get_local_ipaddrs()` via psutil).
-- **URL:** `http://127.0.0.1:<port>/ros2cli/` — port is `11511 + ROS_DOMAIN_ID` ([daemon/__init__.py](deps/ros2cli/ros2cli/ros2cli/daemon/__init__.py) `get_port()`, `get_xmlrpc_server_url()`).
+- **Client:** stdlib `xmlrpc.client.ServerProxy` (re-exported in `ros2cli/xmlrpc/client.py`).
+- **Server:** `ros2cli/xmlrpc/local_server.py` — `LocalXMLRPCServer` extends `xmlrpc.server.SimpleXMLRPCServer`, binds to `127.0.0.1`, and only accepts requests from local IPs (`verify_request` checks `get_local_ipaddrs()` via psutil).
+- **URL:** `http://127.0.0.1:<port>/ros2cli/` — port is `11511 + ROS_DOMAIN_ID` (see `ros2cli/daemon/__init__.py` `get_port()`, `get_xmlrpc_server_url()`).
 
 ---
 
 ## 2. Node strategy: daemon vs direct
 
-[ros2cli/node/strategy.py](deps/ros2cli/ros2cli/ros2cli/node/strategy.py):
+`ros2cli/node/strategy.py`:
 
 - **`NodeStrategy.__init__(args)`**
   1. If `use_daemon` (default True, unless `--no-daemon`) and **`is_daemon_running(args)`** → use **`DaemonNode(args)`**. If `DaemonNode.connected` is False, fall back to **`DirectNode(args)`**.
@@ -28,7 +28,7 @@ So: **first run** spawns the daemon but uses DirectNode for that run. **Subseque
 
 ## 3. DaemonNode — CLI side
 
-[ros2cli/node/daemon.py](deps/ros2cli/ros2cli/ros2cli/node/daemon.py):
+`ros2cli/node/daemon.py`:
 
 - **`DaemonNode(args)`**  
   Builds **`ServerProxy(daemon.get_xmlrpc_server_url(), allow_none=True)`** (stdlib XML-RPC client).
@@ -43,7 +43,7 @@ So: **first run** spawns the daemon but uses DirectNode for that run. **Subseque
 
 ## 4. Spawning the daemon (socket handoff)
 
-[ros2cli/node/daemon.py](deps/ros2cli/ros2cli/ros2cli/node/daemon.py) `spawn_daemon(args, timeout=None, debug=False)`:
+`ros2cli/node/daemon.py` `spawn_daemon(args, timeout=None, debug=False)`:
 
 1. **Create XML-RPC server in this process**  
    `server = daemon.make_xmlrpc_server()` → binds to `127.0.0.1:11511+ROS_DOMAIN_ID`. If **`EADDRINUSE`**, assume daemon already running and return False.
@@ -64,7 +64,7 @@ So: **first run** spawns the daemon but uses DirectNode for that run. **Subseque
 
 ## 5. Daemon process — server side
 
-[ros2cli/daemon/__init__.py](deps/ros2cli/ros2cli/ros2cli/daemon/__init__.py):
+`ros2cli/daemon/__init__.py`:
 
 - **`serve_and_close(server, timeout=2*60*60)`**  
   Calls **`serve(server, timeout=timeout)`**, then `server.server_close()` in `finally`.

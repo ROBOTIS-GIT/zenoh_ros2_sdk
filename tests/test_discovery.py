@@ -45,10 +45,14 @@ class TestParseLivelinessKeyexpr:
     def test_invalid_prefix_returns_none(self):
         assert _parse_liveliness_keyexpr("other/0/1/2/3/MP/%/%/n/%t/a/b/c") is None
 
-    def test_service_kind_returns_none(self):
-        # Discovery only parses MP and MS; SS/SC are ignored
+    def test_service_kind_parsed(self):
+        # Services now use SS (server) / SC (client) kinds for discovery
         key = "@ros2_lv/0/0/1/1/SS/%/%/node/%add_two_ints/example_interfaces::srv::dds_::AddTwoInts_/h/q"
-        assert _parse_liveliness_keyexpr(key) is None
+        parsed = _parse_liveliness_keyexpr(key)
+        assert parsed is not None
+        assert parsed["kind"] == EntityKind.SERVICE.value
+        assert parsed["qualified_name"] == "/add_two_ints"
+        assert parsed["dds_type"] == "example_interfaces::srv::dds_::AddTwoInts_"
 
     def test_too_few_parts_returns_none(self):
         assert _parse_liveliness_keyexpr("@ros2_lv/0/1/2") is None

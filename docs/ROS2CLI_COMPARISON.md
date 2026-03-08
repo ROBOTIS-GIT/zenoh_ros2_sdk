@@ -77,7 +77,7 @@ This document compares the **exact logic** of `ros2 topic list` and `ros2 topic 
 
 ## 4. Liveliness pattern (rmw_zenoh alignment)
 
-Discovery uses the same liveliness keyexpr format as **rmw_zenoh** (see deps/rmw_zenoh/docs/design.md and liveliness_utils.cpp):
+Discovery uses the same liveliness keyexpr format as **rmw_zenoh** (see the rmw_zenoh design documentation in the upstream repository):
 
 - Endpoint tokens have **13 segments**, e.g.  
   `@ros2_lv/<domain>/<session_id>/<node_id>/<entity_id>/MP/<enclave>/<namespace>/<node_name>/<mangled_topic>/<type_name>/<type_hash>/<qos>`
