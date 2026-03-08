@@ -2,9 +2,15 @@
 """
 20 - Subscribe to BatteryState Messages
 
-Demonstrates how to subscribe to a ROS2 topic and receive sensor_msgs/msg/BatteryState messages.
+Demonstrates how to subscribe to a ROS2 topic and receive `sensor_msgs/msg/BatteryState` messages.
 BatteryState reports voltage, charge percentage, status, health, and optional cell-level data.
+
+By default this example subscribes to `/battery_state`. You can override the topic name
+by passing it as the first command-line argument:
+
+  python3 examples/20_subscribe_battery_state.py /ai_worker/battery/left/state
 """
+import sys
 import math
 import time
 
@@ -25,8 +31,10 @@ POWER_SUPPLY_TECHNOLOGY = (
 
 
 def main():
+    topic = sys.argv[1] if len(sys.argv) > 1 else "/battery_state"
+
     print("20 - Subscribe to BatteryState Messages")
-    print("Subscribing to /ai_worker/battery/left/state topic...\n")
+    print(f"Subscribing to {topic} topic...\n")
 
     message_count = [0]  # Use list to allow modification in nested function
 
@@ -75,9 +83,9 @@ def main():
 
     # Create subscriber
     sub = ROS2Subscriber(
-        topic="/ai_worker/battery/left/state",
+        topic=topic,
         msg_type="sensor_msgs/msg/BatteryState",
-        callback=on_message
+        callback=on_message,
     )
 
     try:

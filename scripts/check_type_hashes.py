@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-Compare type hashes from live publishers with zenoh_ros2_sdk computed hashes.
+Developer tool: compare type hashes from live publishers with zenoh_ros2_sdk
+computed hashes.
 
-Uses the SDK's topic list and topic info (via NodeStrategy: daemon when available,
-else in-process discovery) to get topic types and publisher type hashes, then
-compares only for message types supported by the SDK (packages defined in
-zenoh_ros2_sdk._repositories). Skips unsupported namespaces (e.g. action_msgs)
-and arbitrary message types the SDK does not support.
+This script is intended for **debugging and validation** of type-hash behavior,
+not as a stable public API. It uses the SDK's topic list and topic info
+(via NodeStrategy: daemon when available, else in-process discovery) to get
+topic types and publisher type hashes, then compares only for message types
+supported by the SDK (packages defined in `zenoh_ros2_sdk._repositories`).
+It skips unsupported namespaces (e.g. `action_msgs`) and message types the SDK
+does not yet support.
 
 Run from repo root (no ROS2 install required; uses Zenoh discovery):
   python3 scripts/check_type_hashes.py
   python3 scripts/check_type_hashes.py --router 127.0.0.1:7447 --domain-id 0
 
-With the daemon running (zenoh-ros2 daemon start), discovery uses the daemon
-and the script exits without delay. Use --no-daemon to force in-process discovery.
+With the daemon running (`zenoh-ros2 daemon start`), discovery uses the daemon
+and the script exits without delay. Use --no-daemon to force in-process
+discovery.
 """
 import argparse
 import sys

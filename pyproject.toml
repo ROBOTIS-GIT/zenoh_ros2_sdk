@@ -66,3 +66,6 @@ exclude = ["tests*", "examples*"]
 
 [tool.setuptools.package-data]
 zenoh_ros2_sdk = ["config/*.json5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

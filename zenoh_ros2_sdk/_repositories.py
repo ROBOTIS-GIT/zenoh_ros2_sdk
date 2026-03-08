@@ -93,6 +93,50 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
             "tf2_msgs",  # Contains TFMessage, TF2Error messages
         ],
     ),
+    # control_msgs (ROS 2 control message definitions)
+    # Reference: https://github.com/ros-controls/control_msgs
+    "control_msgs": MessageRepository(
+        url="https://github.com/ros-controls/control_msgs.git",
+        commit="jazzy",  # Use jazzy branch/tag for reproducibility
+        cache_path="control_msgs",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "control_msgs",
+        ],
+    ),
+    # ros2_control (contains controller_manager_msgs and related interfaces)
+    # Reference: https://github.com/ros-controls/ros2_control
+    "ros2_control": MessageRepository(
+        url="https://github.com/ros-controls/ros2_control.git",
+        commit="jazzy",  # Use jazzy branch/tag for reproducibility
+        cache_path="ros2_control",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "controller_manager_msgs",
+        ],
+    ),
+    # pal_statistics (PAL Robotics statistics messages)
+    # Reference: https://github.com/pal-robotics/pal_statistics
+    "pal_statistics": MessageRepository(
+        url="https://github.com/pal-robotics/pal_statistics.git",
+        commit="humble-devel",  # Use jazzy branch/tag for reproducibility
+        cache_path="pal_statistics",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "pal_statistics_msgs",
+        ],
+    ),
+    # dynamixel_interfaces (ROBOTIS Dynamixel message interfaces)
+    # Reference: https://github.com/ROBOTIS-GIT/dynamixel_interfaces
+    "dynamixel_interfaces": MessageRepository(
+        url="https://github.com/ROBOTIS-GIT/dynamixel_interfaces.git",
+        commit="jazzy",  # Use jazzy branch/tag for reproducibility
+        cache_path="dynamixel_interfaces",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "dynamixel_interfaces",
+        ],
+    ),
 }
 
 # Mapping from message package namespace to repository name

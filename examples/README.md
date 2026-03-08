@@ -162,11 +162,12 @@ python3 examples/19_discovery_topic_list.py /chatter     # list topics, then inf
 ```
 
 ### [`20_subscribe_battery_state.py`](20_subscribe_battery_state.py)
-Demonstrates how to subscribe to `sensor_msgs/msg/BatteryState` messages and access battery data including voltage, current, charge percentage, status, health, and optional cell voltages. Subscribes to `/ai_worker/battery/left/state` by default.
+Demonstrates how to subscribe to `sensor_msgs/msg/BatteryState` messages and access battery data including voltage, current, charge percentage, status, health, and optional cell voltages. Subscribes to `/battery_state` by default (override the topic name by passing it as the first argument).
 
 **Usage:**
 ```bash
-python3 examples/20_subscribe_battery_state.py
+python3 examples/20_subscribe_battery_state.py                   # subscribe to /battery_state
+python3 examples/20_subscribe_battery_state.py /my/battery/topic
 ```
 
 ## Running Examples
