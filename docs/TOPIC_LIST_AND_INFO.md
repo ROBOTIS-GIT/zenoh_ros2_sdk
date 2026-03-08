@@ -139,4 +139,4 @@ if info:
 
 ### Runnable example script
 
-See **`examples/19_discovery_topic_list.py`** for a script that lists topics and prints info for a given topic (or the first one found).
+See **`examples/19_discovery_topic_list.py`** for a script that lists topics and prints info for a given topic (or the first one found). This example uses `NodeStrategy`, so when the `zenoh-ros2` daemon is running (or auto-spawned) discovery runs via the daemon and the script exits quickly without the 10-second Zenoh session close delay described in `docs/ZENOH_CLOSE_PANIC.md`.

@@ -7,12 +7,20 @@ import json5
 import zenoh
 import uuid
 import threading
+from pathlib import Path
 from typing import Optional
 from rosbags.typesys import get_types_from_msg, get_typestore, Stores
 from .message_registry import get_registry, load_service_type
 from .logger import get_logger
 
 logger = get_logger("session")
+
+# Path to the default session config (aligned with rmw_zenoh DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5)
+_DEFAULT_SESSION_CONFIG_PATH = (
+    Path(__file__).resolve().parent / "config" / "default_session_config.json5"
+)
+# Env to use a custom session config file instead of the bundled default (same as rmw_zenoh)
+ZENOH_SESSION_CONFIG_URI_ENV = "ZENOH_SESSION_CONFIG_URI"
 
 
 def _parse_zenoh_config_override(override: str) -> list[tuple[str, str]]:
@@ -85,8 +93,21 @@ class ZenohSession:
     def __init__(self, router_ip: str = "127.0.0.1", router_port: int = 7447):
         self.router_ip = router_ip
         self.router_port = router_port
-        self.conf = zenoh.Config()
-        # Defaults (can be overridden via ZENOH_CONFIG_OVERRIDE)
+
+        # Load default session config (rmw_zenoh-aligned) or custom file from ZENOH_SESSION_CONFIG_URI
+        config_uri = os.environ.get(ZENOH_SESSION_CONFIG_URI_ENV, "").strip()
+        if config_uri and os.path.isfile(config_uri):
+            config_path = Path(config_uri)
+            logger.debug("Loading Zenoh session config from %s", config_path)
+            self.conf = zenoh.Config.from_file(str(config_path))
+        else:
+            if not _DEFAULT_SESSION_CONFIG_PATH.is_file():
+                raise FileNotFoundError(
+                    f"Default session config not found: {_DEFAULT_SESSION_CONFIG_PATH}"
+                )
+            self.conf = zenoh.Config.from_file(str(_DEFAULT_SESSION_CONFIG_PATH))
+
+        # Override connect endpoints with SDK router address (and env overrides)
         self.conf.insert_json5(
             "connect/endpoints", f'["tcp/{router_ip}:{router_port}"]'
         )
@@ -343,4 +364,5 @@ class ZenohSession:
         """Close the session"""
         if self.session:
             self.session.close()
-            self._instance = None
+            ZenohSession._instance = None
+

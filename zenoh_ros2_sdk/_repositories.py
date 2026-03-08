@@ -15,12 +15,15 @@ class MessageRepository:
         cache_path: Path to clone the repository to in the local cache
         msg_path: Relative path within the repo to message files (e.g., "msg/")
         packages: List of message package names this repository contains (e.g., ["std_msgs", "geometry_msgs"])
+        flat_layout: If True, single-package repos use <repo>/msg/ (e.g. example_interfaces).
+            If False, use <repo>/<package>/msg/ even for one package (e.g. geometry2).
     """
     url: str
     commit: str
     cache_path: str
     msg_path: str
     packages: List[str]
+    flat_layout: bool = False  # True only for example_interfaces (msg/ at root)
 
 
 # Repository definitions for common ROS2 message packages
@@ -76,6 +79,7 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
         packages=[
             "example_interfaces",  # Contains AddTwoInts service and other examples
         ],
+        flat_layout=True,  # <repo>/msg/<file>.msg, not <repo>/example_interfaces/msg/
     ),
     # Geometry2 (contains tf2_msgs and other TF2-related packages)
     # This repository contains TF2 transform message definitions

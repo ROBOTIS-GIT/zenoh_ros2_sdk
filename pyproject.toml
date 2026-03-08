@@ -63,3 +63,6 @@ zenoh-ros2 = "zenoh_ros2_sdk.cli:main"
 
 [tool.setuptools.packages.find]
 exclude = ["tests*", "examples*"]
+
+[tool.setuptools.package-data]
+zenoh_ros2_sdk = ["config/*.json5"]

@@ -16,6 +16,7 @@ setup(
     url="https://github.com/robotis-git/zenoh_ros2_sdk",
     packages=find_packages(exclude=["tests", "examples"]),
     include_package_data=True,
+    package_data={"zenoh_ros2_sdk": ["config/*.json5"]},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

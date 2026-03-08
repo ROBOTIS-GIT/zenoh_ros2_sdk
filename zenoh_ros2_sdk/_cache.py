@@ -43,12 +43,16 @@ def construct_message_path(
     Returns:
         Full path to the message/service file
     """
-    # Check if this is a single-package repository
-    # (repository contains only one package and it matches the namespace)
-    is_single_package = len(repository.packages) == 1 and repository.packages[0] == namespace
+    # Check if this is a single-package repo with messages at repo root (msg/, srv/)
+    # vs meta-package layout (<repo>/<package>/msg/) used by geometry2 and others
+    is_single_flat = (
+        len(repository.packages) == 1
+        and repository.packages[0] == namespace
+        and getattr(repository, "flat_layout", False)
+    )
 
-    if is_single_package:
-        # Single-package repository: files are directly at repo root (msg/, srv/)
+    if is_single_flat:
+        # Single-package, flat layout: files directly at repo root (msg/, srv/)
         # Example: example_interfaces -> <repo>/msg/UInt32.msg
         return os.path.join(repo_path, msg_type, f"{file_name}.{msg_type}")
     elif repository.msg_path:

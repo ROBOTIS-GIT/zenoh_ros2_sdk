@@ -13,15 +13,18 @@ Usage:
 """
 import sys
 
-from zenoh_ros2_sdk import get_topic_names_and_types, get_topic_info
+from zenoh_ros2_sdk.node.strategy import NodeStrategy
 
 
 def main():
     topic_filter = sys.argv[1] if len(sys.argv) > 1 else None
 
     print("19 - Discovery: topic list and topic info\n")
+
+    strategy = NodeStrategy()
+
     print("Topics (with types):")
-    topics = get_topic_names_and_types()
+    topics = strategy.get_topic_names_and_types()
     if not topics:
         print("  (none discovered; ensure Zenoh router is running and publishers/subscribers exist)")
         return
@@ -30,29 +33,37 @@ def main():
         types_str = ", ".join(types)
         print(f"  {name}  [{types_str}]")
 
-    # Show info for one topic
+    # Show info for topic(s)
     if topic_filter:
         topic_name = topic_filter if topic_filter.startswith("/") else "/" + topic_filter
-        show_info(topic_name)
+        print(f"\nTopic info for '{topic_name}' (use: python3 examples/19_discovery_topic_list.py <topic>):")
+        show_info(strategy, topic_name)
     else:
-        # Show info for first topic
-        first_name = topics[0][0]
-        print(f"\nTopic info for '{first_name}' (use: python3 examples/19_discovery_topic_list.py <topic>):")
-        show_info(first_name)
+        for name, _ in topics:
+            print(f"\nTopic info for '{name}' (use: python3 examples/19_discovery_topic_list.py <topic>):")
+            show_info(strategy, name)
 
 
-def show_info(topic_name: str) -> None:
-    info = get_topic_info(topic_name, verbose=True)
+def show_info(strategy: NodeStrategy, topic_name: str) -> None:
+    info = strategy.get_topic_info(topic_name, timeout=0.5, verbose=True)
     if not info:
         print(f"  Unknown topic '{topic_name}'")
         return
-    print(f"  Type: {info.topic_types[0] if len(info.topic_types) == 1 else info.topic_types}")
-    print(f"  Publisher count: {info.publisher_count}")
-    for p in info.publishers:
-        print(f"    - node: {p.node_namespace}/{p.node_name}  type: {p.topic_type}  qos: {p.qos}")
-    print(f"  Subscription count: {info.subscriber_count}")
-    for s in info.subscribers:
-        print(f"    - node: {s.node_namespace}/{s.node_name}  type: {s.topic_type}  qos: {s.qos}")
+    topic_types = info["topic_types"]
+    type_str = topic_types[0] if len(topic_types) == 1 else topic_types
+    print(f"  Type: {type_str}")
+    print(f"  Publisher count: {info['publisher_count']}")
+    for p in info.get("publishers", []):
+        print(
+            f"    - node: {p['node_namespace']}/{p['node_name']}  "
+            f"type: {p['topic_type']}  qos: {p['qos']}"
+        )
+    print(f"  Subscription count: {info['subscriber_count']}")
+    for s in info.get("subscribers", []):
+        print(
+            f"    - node: {s['node_namespace']}/{s['node_name']}  "
+            f"type: {s['topic_type']}  qos: {s['qos']}"
+        )
 
 
 if __name__ == "__main__":
