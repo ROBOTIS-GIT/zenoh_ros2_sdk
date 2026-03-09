@@ -137,6 +137,17 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
             "dynamixel_interfaces",
         ],
     ),
+    # physical_ai_interfaces (ROBOTIS Physical AI message/service interfaces)
+    # Reference: https://github.com/ROBOTIS-GIT/physical_ai_tools/tree/main/physical_ai_interfaces
+    "physical_ai_tools": MessageRepository(
+        url="https://github.com/ROBOTIS-GIT/physical_ai_tools.git",
+        commit="feature-temp-merge",
+        cache_path="physical_ai_tools",
+        msg_path="",
+        packages=[
+            "physical_ai_interfaces",
+        ],
+    ),
 }
 
 # Mapping from message package namespace to repository name
