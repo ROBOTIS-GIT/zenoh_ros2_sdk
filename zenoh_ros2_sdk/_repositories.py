@@ -15,12 +15,15 @@ class MessageRepository:
         cache_path: Path to clone the repository to in the local cache
         msg_path: Relative path within the repo to message files (e.g., "msg/")
         packages: List of message package names this repository contains (e.g., ["std_msgs", "geometry_msgs"])
+        flat_layout: If True, single-package repos use <repo>/msg/ (e.g. example_interfaces).
+            If False, use <repo>/<package>/msg/ even for one package (e.g. geometry2).
     """
     url: str
     commit: str
     cache_path: str
     msg_path: str
     packages: List[str]
+    flat_layout: bool = False  # True only for example_interfaces (msg/ at root)
 
 
 # Repository definitions for common ROS2 message packages
@@ -76,6 +79,7 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
         packages=[
             "example_interfaces",  # Contains AddTwoInts service and other examples
         ],
+        flat_layout=True,  # <repo>/msg/<file>.msg, not <repo>/example_interfaces/msg/
     ),
     # Geometry2 (contains tf2_msgs and other TF2-related packages)
     # This repository contains TF2 transform message definitions
@@ -87,6 +91,61 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
         msg_path="",  # Messages are at <package>/msg/<message>.msg
         packages=[
             "tf2_msgs",  # Contains TFMessage, TF2Error messages
+        ],
+    ),
+    # control_msgs (ROS 2 control message definitions)
+    # Reference: https://github.com/ros-controls/control_msgs
+    "control_msgs": MessageRepository(
+        url="https://github.com/ros-controls/control_msgs.git",
+        commit="jazzy",  # Use jazzy branch/tag for reproducibility
+        cache_path="control_msgs",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "control_msgs",
+        ],
+    ),
+    # ros2_control (contains controller_manager_msgs and related interfaces)
+    # Reference: https://github.com/ros-controls/ros2_control
+    "ros2_control": MessageRepository(
+        url="https://github.com/ros-controls/ros2_control.git",
+        commit="jazzy",  # Use jazzy branch/tag for reproducibility
+        cache_path="ros2_control",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "controller_manager_msgs",
+        ],
+    ),
+    # pal_statistics (PAL Robotics statistics messages)
+    # Reference: https://github.com/pal-robotics/pal_statistics
+    "pal_statistics": MessageRepository(
+        url="https://github.com/pal-robotics/pal_statistics.git",
+        commit="humble-devel",  # Use jazzy branch/tag for reproducibility
+        cache_path="pal_statistics",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "pal_statistics_msgs",
+        ],
+    ),
+    # dynamixel_interfaces (ROBOTIS Dynamixel message interfaces)
+    # Reference: https://github.com/ROBOTIS-GIT/dynamixel_interfaces
+    "dynamixel_interfaces": MessageRepository(
+        url="https://github.com/ROBOTIS-GIT/dynamixel_interfaces.git",
+        commit="jazzy",  # Use jazzy branch/tag for reproducibility
+        cache_path="dynamixel_interfaces",
+        msg_path="",  # Messages are at <package>/msg/<message>.msg
+        packages=[
+            "dynamixel_interfaces",
+        ],
+    ),
+    # physical_ai_interfaces (ROBOTIS Physical AI message/service interfaces)
+    # Reference: https://github.com/ROBOTIS-GIT/physical_ai_tools/tree/main/physical_ai_interfaces
+    "physical_ai_tools": MessageRepository(
+        url="https://github.com/ROBOTIS-GIT/physical_ai_tools.git",
+        commit="feature-temp-merge",
+        cache_path="physical_ai_tools",
+        msg_path="",
+        packages=[
+            "physical_ai_interfaces",
         ],
     ),
 }

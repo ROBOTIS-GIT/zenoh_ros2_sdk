@@ -40,6 +40,9 @@ htmlcov/
 # MkDocs output
 site/
 
+# Cloned reference repos (ros2cli, ros-z)
+deps/
+
 # OS
 .DS_Store
 Thumbs.db

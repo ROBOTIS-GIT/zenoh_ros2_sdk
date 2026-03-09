@@ -197,8 +197,28 @@ def ros2_to_dds_type(ros2_type: str) -> str:
     return ros2_type.replace("/", "::")
 
 
+def dds_to_ros_type(dds_type: str) -> str:
+    """Convert DDS type name to ROS2 type name (inverse of ros2_to_dds_type)."""
+    parts = dds_type.split("::")
+    if len(parts) >= 4:
+        # e.g. std_msgs::msg::dds_::String_ -> std_msgs/msg/String
+        namespace = parts[0]
+        msg_or_srv = parts[1]
+        name = parts[3].rstrip("_")
+        return f"{namespace}/{msg_or_srv}/{name}"
+    return dds_type.replace("::", "/")
+
+
 def _parse_msg_definition(msg_def: str) -> List[Dict]:
-    """Parse a .msg file definition into field structures."""
+    """Parse a .msg file definition into field structures.
+
+    Only data fields are returned; constants are excluded so that the type hash
+    matches ROS2 (type description includes only struct members, not const declarations).
+    Constant vs field rule matches rosidl_adapter/parser.py: a line is a constant iff
+    the remainder after the type token contains '=' (e.g. "type NAME = value" or "type NAME=value").
+    See: deps/rosidl/rosidl_adapter/rosidl_adapter/parser.py parse_message_string(),
+    CONSTANT_SEPARATOR and MessageSpecification(fields=..., constants=...).
+    """
     fields = []
     for line in msg_def.split('\n'):
         # Remove comments
@@ -220,47 +240,73 @@ def _parse_msg_definition(msg_def: str) -> List[Dict]:
         field_type = parts[0]
         field_name = parts[1]
 
-        # Skip constants (format: type CONSTANT_NAME=value)
-        # Constants should not be included in the type hash calculation
+        # Skip constants (format: type CONSTANT_NAME=value or type CONSTANT_NAME = value).
+        # Constants must not be included in the type hash calculation (ROS2 type description excludes them).
         if '=' in field_name:
+            continue
+        if len(parts) >= 3 and parts[2] == '=':
             continue
 
         # Check for array/sequence notation
         is_array = False
         is_bounded = False
         array_size = 0
+        string_capacity = 0
+
+        # Bounded string (string<=N, wstring<=N) - must run before array checks.
+        # Only match when type is exactly "string<=N", "string<=N[]", "string<=N[10]", or "string<=N[<=10]".
+        match_bs = re.match(r'^(string|wstring)<=(\d+)(\[\]|\[\d+\]|\[<=\s*\d+\])?$', field_type)
+        if match_bs:
+            field_type = match_bs.group(1)
+            string_capacity = int(match_bs.group(2))
+            suffix = match_bs.group(3)  # None, '[]', '[N]', or '[<=N]'
+            if suffix == '[]':
+                is_array = True
+            elif suffix:
+                match_arr = re.match(r'^\[(\d+)\]$', suffix)
+                if match_arr:
+                    is_array = True
+                    array_size = int(match_arr.group(1))
+                else:
+                    match_bseq = re.match(r'^\[<=\s*(\d+)\]$', suffix)
+                    if match_bseq:
+                        is_array = True
+                        is_bounded = True
+                        array_size = int(match_bseq.group(1))
+
+        # Array notation in field name when only two tokens (e.g. "string<=32 tags[]" or "string name[]")
+        if len(parts) == 2 and field_name.endswith('[]'):
+            is_array = True
+            field_name = field_name[:-2]
+        elif len(parts) == 2:
+            # Array size in second token: "type name[10]". Name must match valid field pattern (no '[' in name).
+            match_name_arr = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\[(\d+)\]$', field_name)
+            if match_name_arr:
+                field_name = match_name_arr.group(1)
+                is_array = True
+                array_size = int(match_name_arr.group(2))
+
+        # Skip malformed line: empty field name (e.g. "type []").
+        if not field_name:
+            continue
 
         # First check: array notation in type name (e.g., "float64[9] name")
         # This format is used in sensor_msgs/Imu.msg for covariance arrays
-        match = re.search(r'^(\w+)\[(\d+)\]$', field_type)
-        if match:
-            # Fixed-size array in type: "float64[9]" -> type="float64", size=9
-            field_type = match.group(1)
-            array_size = int(match.group(2))
-            is_array = True
-            is_bounded = False
-        elif field_type.endswith('[]'):
-            # Unbounded sequence: string[] -> UNBOUNDED_SEQUENCE
-            is_array = True
-            is_bounded = False
-            field_type = field_type[:-2]  # Remove [] from type name
-        elif len(parts) > 2:
-            # Check for array notation after field name (e.g., "string name[10]")
-            array_part = ' '.join(parts[2:])
-            if '[' in array_part and ']' in array_part:
+        if not match_bs:
+            match = re.search(r'^(\w+)\[(\d+)\]$', field_type)
+            if match:
+                # Fixed-size array in type: "float64[9]" -> type="float64", size=9
+                field_type = match.group(1)
+                array_size = int(match.group(2))
                 is_array = True
-                # Check if it's a fixed-size array [10] or bounded sequence [<=10]
-                match = re.search(r'\[(\d+)\]', array_part)
-                if match:
-                    # Fixed-size array
-                    array_size = int(match.group(1))
-                    is_bounded = False
-                else:
-                    # Bounded sequence [<=10] - not common in .msg files but possible
-                    match = re.search(r'\[<=\s*(\d+)\]', array_part)
-                    if match:
-                        array_size = int(match.group(1))
-                        is_bounded = True
+                is_bounded = False
+            elif field_type.endswith('[]'):
+                # Unbounded sequence: string[] -> UNBOUNDED_SEQUENCE
+                is_array = True
+                is_bounded = False
+                field_type = field_type[:-2]  # Remove [] from type name
+        # When len(parts) > 2, remaining tokens are default value in rosidl (e.g. "float32 x 1.0"), not array spec.
+        # Array-after-name is only "type name[10]" or "type name[]" (two tokens, brackets in second token).
 
         fields.append({
             'name': field_name,
@@ -268,16 +314,18 @@ def _parse_msg_definition(msg_def: str) -> List[Dict]:
             'is_array': is_array,
             'is_bounded': is_bounded,
             'array_size': array_size,
+            'string_capacity': string_capacity,
         })
 
     return fields
 
 
-def _field_type_to_type_id(field_type: str, is_array: bool = False, is_bounded: bool = False, array_size: int = 0) -> int:
+def _field_type_to_type_id(field_type: str, is_array: bool = False, is_bounded: bool = False, array_size: int = 0, string_capacity: int = 0) -> int:
     """
     Convert ROS2 field type to field type ID.
 
     In ROS2 .msg files:
+    - Bounded strings: string<=N, wstring<=N -> FIELD_TYPE_BOUNDED_STRING / _WSTRING
     - Fixed-size arrays like `float64[9]` or `string name[10]` are ARRAY types
     - Unbounded sequences like `string[]` are UNBOUNDED_SEQUENCE types
     - Bounded sequences like `string[<=10]` are BOUNDED_SEQUENCE types
@@ -287,8 +335,11 @@ def _field_type_to_type_id(field_type: str, is_array: bool = False, is_bounded: 
         is_array: True if this is an array/sequence
         is_bounded: True if this is a bounded sequence
         array_size: Size of the array (0 for unbounded sequences, >0 for fixed arrays)
+        string_capacity: Upper bound for string/wstring (0 = unbounded)
     """
-    if field_type in PRIMITIVE_TO_FIELD_TYPE:
+    if field_type in ('string', 'wstring') and string_capacity > 0:
+        type_name = 'FIELD_TYPE_BOUNDED_WSTRING' if field_type == 'wstring' else 'FIELD_TYPE_BOUNDED_STRING'
+    elif field_type in PRIMITIVE_TO_FIELD_TYPE:
         type_name = PRIMITIVE_TO_FIELD_TYPE[field_type]
     else:
         type_name = 'FIELD_TYPE_NESTED_TYPE'
@@ -310,11 +361,18 @@ def _serialize_field(field: Dict, msg_type: str) -> Dict:
     """Serialize a field to type description format"""
     field_type = field['type']
     is_nested = field_type not in PRIMITIVE_TO_FIELD_TYPE
+    string_capacity = field.get('string_capacity', 0)
 
     type_dict = {
-        'type_id': _field_type_to_type_id(field_type, field['is_array'], field.get('is_bounded', False), field.get('array_size', 0)),
+        'type_id': _field_type_to_type_id(
+            field_type,
+            field['is_array'],
+            field.get('is_bounded', False),
+            field.get('array_size', 0),
+            string_capacity,
+        ),
         'capacity': field['array_size'] if field['is_array'] else 0,
-        'string_capacity': 0,
+        'string_capacity': string_capacity,
         'nested_type_name': '',
     }
 
@@ -690,6 +748,23 @@ def mangle_name(name: str) -> str:
     if not name or name == "/":
         return "%"
     return name.replace("/", "%")
+
+
+def demangle_name(mangled: str) -> str:
+    """Demangle a name by replacing % with /; result is normalized to start with / for topic names."""
+    if not mangled or mangled == "%":
+        return "/"
+    out = mangled.replace("%", "/")
+    if out and not out.startswith("/"):
+        out = "/" + out
+    return out
+
+
+def demangle_name_optional_leading_slash(mangled: str) -> str:
+    """Demangle by replacing % with / only; do not add leading /. Use for node names and namespaces."""
+    if not mangled or mangled == "%":
+        return "/"
+    return mangled.replace("%", "/")
 
 
 def load_dependencies_recursive(

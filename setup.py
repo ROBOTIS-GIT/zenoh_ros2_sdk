@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="zenoh-ros2-sdk",
-    version="0.1.6",
+    version="0.1.7",
     author="Woojin Wie",
     author_email="wwj@robotis.com",
     description="Python SDK for ROS2 communication via Zenoh - No ROS2 installation required",
@@ -16,6 +16,7 @@ setup(
     url="https://github.com/robotis-git/zenoh_ros2_sdk",
     packages=find_packages(exclude=["tests", "examples"]),
     include_package_data=True,
+    package_data={"zenoh_ros2_sdk": ["config/*.json5"]},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -42,6 +43,11 @@ setup(
             "pytest-cov>=4.0.0",
             "black>=22.0.0",
             "flake8>=4.0.0",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "zenoh-ros2=zenoh_ros2_sdk.cli:main",
         ],
     },
 )

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zenoh-ros2-sdk"
-version = "0.1.6"
+version = "0.1.7"
 description = "Python SDK for ROS 2 communication via Zenoh - Use ROS 2 without ROS 2 environment"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -58,5 +58,14 @@ Repository = "https://github.com/robotis-git/zenoh_ros2_sdk"
 Issues = "https://github.com/robotis-git/zenoh_ros2_sdk/issues"
 Documentation = "https://github.com/robotis-git/zenoh_ros2_sdk#readme"
 
+[project.scripts]
+zenoh-ros2 = "zenoh_ros2_sdk.cli:main"
+
 [tool.setuptools.packages.find]
 exclude = ["tests*", "examples*"]
+
+[tool.setuptools.package-data]
+zenoh_ros2_sdk = ["config/*.json5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

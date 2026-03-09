@@ -29,6 +29,21 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 pip install zenoh-ros2-sdk
 ```
 
+After install, the **`zenoh-ros2`** command is available. Topic and service commands:
+
+```bash
+# Topic discovery (ros2 topic list / info equivalents)
+zenoh-ros2 topic list -t              # list topics with types
+zenoh-ros2 topic info -v /chatter     # verbose info for a topic
+zenoh-ros2 --router 127.0.0.1:7447 topic list
+
+# Service discovery (ros2 service list / type equivalents)
+zenoh-ros2 service list -t            # list services with types
+zenoh-ros2 service type /add_two_ints # print type(s) for a service
+```
+
+For fast discovery (no ~10 s exit delay), start the background daemon: `zenoh-ros2 daemon start`. Then `zenoh-ros2 topic ...` and `zenoh-ros2 service ...` use it and return quickly. Use `--no-daemon` to run discovery in-process.
+
 ### Simple Publisher
 
 ```python

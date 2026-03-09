@@ -70,6 +70,17 @@ Demonstrates how to create a ROS2 service client using zenoh_ros2_sdk. This exam
 python3 examples/08_service_client.py
 ```
 
+You can also use these examples together with the CLI service discovery commands:
+
+```bash
+# In one terminal: start the router and daemon, then run the service server
+python3 examples/07_service_server.py
+
+# In another terminal: list services and show the AddTwoInts service type
+zenoh-ros2 service list -t
+zenoh-ros2 service type /add_two_ints
+```
+
 ### [`09_subscribe_compressed_image.py`](09_subscribe_compressed_image.py)
 Demonstrates how to subscribe to `sensor_msgs/msg/CompressedImage` messages (camera stream example; ZED topic by default).
 
@@ -150,6 +161,24 @@ Demonstrates how to subscribe to `std_msgs/msg/Empty` messages and react to trig
 **Usage:**
 ```bash
 python3 examples/18_subscribe_empty.py
+```
+
+### [`19_discovery_topic_list.py`](19_discovery_topic_list.py)
+Demonstrates the discovery API: list all topics (with types) and show verbose info for a topic. Equivalent to `zenoh-ros2 topic list -t` and `zenoh-ros2 topic info -v TOPIC`.
+
+**Usage:**
+```bash
+python3 examples/19_discovery_topic_list.py              # list topics, then info for first topic
+python3 examples/19_discovery_topic_list.py /chatter     # list topics, then info for /chatter
+```
+
+### [`20_subscribe_battery_state.py`](20_subscribe_battery_state.py)
+Demonstrates how to subscribe to `sensor_msgs/msg/BatteryState` messages and access battery data including voltage, current, charge percentage, status, health, and optional cell voltages. Subscribes to `/battery_state` by default (override the topic name by passing it as the first argument).
+
+**Usage:**
+```bash
+python3 examples/20_subscribe_battery_state.py                   # subscribe to /battery_state
+python3 examples/20_subscribe_battery_state.py /my/battery/topic
 ```
 
 ## Running Examples
