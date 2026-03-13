@@ -325,7 +325,6 @@ class ROS2ServiceServer:
 
     def _query_handler(self, query: zenoh.Query):
         """Handle incoming service request query"""
-        # Keep logs at debug to avoid spamming in production.
         query_key = str(query.key_expr) if hasattr(query, 'key_expr') else 'unknown'
         logger.debug(f"Service request received. Query keyexpr: {query_key}, Expected: {self.keyexpr}")
         try:
