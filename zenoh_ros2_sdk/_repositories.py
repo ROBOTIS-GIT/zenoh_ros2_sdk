@@ -148,6 +148,17 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
             "physical_ai_interfaces",
         ],
     ),
+    # interfaces (Cyclo Intelligence message/service interfaces)
+    # Reference: https://github.com/ROBOTIS-GIT/cyclo_intelligence/tree/main/interfaces
+    "cyclo_intelligence": MessageRepository(
+        url="https://github.com/ROBOTIS-GIT/cyclo_intelligence.git",
+        commit="feature-code-optimization",
+        cache_path="cyclo_intelligence",
+        msg_path="",
+        packages=[
+            "interfaces",
+        ],
+    ),
 }
 
 # Mapping from message package namespace to repository name
