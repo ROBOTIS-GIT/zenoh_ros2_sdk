@@ -596,6 +596,24 @@ def compute_service_type_hash(
     request_fields = _parse_msg_definition(request_definition)
     response_fields = _parse_msg_definition(response_definition)
 
+    # Handle empty messages: IDL/DDS requires at least one member in a struct.
+    # ROS2's rosidl_adapter adds a dummy uint8 member for empty .msg files.
+    # We must do the same to match the type hash (same as compute_type_hash_from_msg).
+    if not request_fields:
+        request_fields = [{
+            'name': EMPTY_STRUCTURE_REQUIRED_MEMBER_NAME,
+            'type': 'uint8',
+            'is_array': False,
+            'array_size': 0,
+        }]
+    if not response_fields:
+        response_fields = [{
+            'name': EMPTY_STRUCTURE_REQUIRED_MEMBER_NAME,
+            'type': 'uint8',
+            'is_array': False,
+            'array_size': 0,
+        }]
+
     # Build type map with request, response, and event message types
     type_map = {}
     type_map[request_type] = _serialize_type_description(request_type, request_fields)

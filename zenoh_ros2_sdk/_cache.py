@@ -7,6 +7,7 @@ Source: https://github.com/robot-descriptions/robot_descriptions.py
 """
 import os
 import shutil
+import subprocess
 from typing import Optional, Union
 
 from git import GitCommandError, InvalidGitRepositoryError, RemoteProgress, Repo
@@ -16,6 +17,29 @@ from ._repositories import MESSAGE_REPOSITORIES, MessageRepository, PACKAGE_TO_R
 from .logger import get_logger
 
 logger = get_logger("cache")
+
+
+def _mark_git_safe_directory(path: str) -> None:
+    """Allow GitPython to open bind-mounted cache repos owned by the host user."""
+    safe_path = os.path.realpath(path)
+    try:
+        existing = subprocess.run(
+            ["git", "config", "--global", "--get-all", "safe.directory"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        if safe_path in existing.stdout.splitlines():
+            return
+        subprocess.run(
+            ["git", "config", "--global", "--add", "safe.directory", safe_path],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        logger.debug(f"Failed to mark git safe.directory for {safe_path}: {e}")
 
 
 def construct_message_path(
@@ -145,6 +169,7 @@ def clone_to_cache(repo_name: str, commit: Optional[str] = None) -> str:
     # Clone or update repository
     clone = None
     if os.path.exists(target_dir):
+        _mark_git_safe_directory(target_dir)
         try:
             clone = Repo(target_dir)
         except InvalidGitRepositoryError:
@@ -161,6 +186,7 @@ def clone_to_cache(repo_name: str, commit: Optional[str] = None) -> str:
             target_dir,
             progress=progress_bar.update,
         )
+        _mark_git_safe_directory(target_dir)
 
     # Checkout specific commit if needed
     checkout_commit = commit if commit is not None else repository.commit
