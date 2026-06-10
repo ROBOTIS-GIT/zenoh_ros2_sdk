@@ -1,0 +1,25 @@
+---
+description: "Project-wide guidance for zenoh-ros2-sdk."
+globs:
+alwaysApply: true
+---
+
+# zenoh-ros2-sdk Project Rules
+
+Use `AGENTS.md` as the canonical source of truth. Read it before making changes
+that affect code, docs, examples, tests, release metadata, or repository
+workflow.
+
+Core commands:
+
+```bash
+python3 -m pip install -e ".[dev,docs]"
+python3 -m pytest
+python3 -m mkdocs build
+```
+
+Keep edits focused. Preserve ROS 2 compatibility behavior for serialization,
+type hashes, discovery, liveliness, QoS, and service request/response handling.
+
+Do not commit local caches, cloned ROS 2 message repositories, `__pycache__`,
+`.pytest_cache`, build output, or machine-specific editor files.

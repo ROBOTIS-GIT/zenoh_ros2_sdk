@@ -8,6 +8,7 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 
 - **Docs (GitHub Pages)**: [robotis-git.github.io/zenoh_ros2_sdk](https://robotis-git.github.io/zenoh_ros2_sdk/)
 - **API Reference (in this repo)**: [`docs/api/`](docs/api/)
+- **AI agent guide**: [`AGENTS.md`](AGENTS.md) and [`docs/contributing/ai-agents.md`](docs/contributing/ai-agents.md)
 
 ## Features
 

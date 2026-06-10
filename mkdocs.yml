@@ -52,5 +52,6 @@ nav:
           - message_registry: api/message_registry.md
   - Contributing:
       - Overview: contributing/index.md
+      - AI Agents: contributing/ai-agents.md
       - Docs: contributing/docs.md
       - Docstrings: contributing/docstrings.md
