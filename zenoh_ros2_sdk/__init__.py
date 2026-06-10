@@ -20,7 +20,7 @@ from .discovery import (
 )
 from .logger import get_logger
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 __all__ = [
     "ZenohSession",
     "ROS2Publisher",
