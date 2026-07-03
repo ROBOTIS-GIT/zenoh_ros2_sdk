@@ -583,14 +583,14 @@ def compute_service_type_hash(
     if not response_definition or not response_definition.strip():
         raise ValueError(f"Service definition is required for response. Service type: {srv_type}")
 
-    namespace, srv, service_name = parts
-    request_type = f"{namespace}/srv/{service_name}_Request"
-    response_type = f"{namespace}/srv/{service_name}_Response"
+    namespace, category, service_name = parts
+    request_type = f"{namespace}/{category}/{service_name}_Request"
+    response_type = f"{namespace}/{category}/{service_name}_Response"
     # Event message type (for services, this is typically empty or a special type)
     # For most services, event_message is not used, but we need to include it
     # The event message is typically the same structure as the service itself
     # For simplicity, we'll use an empty message type or the service type itself
-    event_type = f"{namespace}/srv/{service_name}_Event"
+    event_type = f"{namespace}/{category}/{service_name}_Event"
 
     # Parse request and response definitions
     request_fields = _parse_msg_definition(request_definition)
@@ -759,6 +759,113 @@ def compute_service_type_hash(
     # Extract full type description and compute hash
     full_type_description = _extract_full_type_description(srv_type, type_map)
     return _calculate_type_hash(full_type_description)
+
+
+def compute_action_type_hashes(
+    action_type: str,
+    goal_definition: str,
+    result_definition: str,
+    feedback_definition: str,
+    dependencies: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
+    """
+    Compute ROS2 type hashes for action-specific sub-types.
+
+    Uses the three raw sections from a .action file to synthesize the composite
+    type definitions for send_goal, get_result, and the FeedbackMessage, then
+    delegates to the existing service/message hash functions.
+
+    Args:
+        action_type: ROS2 action type (e.g., "fibonacci/action/Fibonacci")
+        goal_definition: Raw goal fields from the .action file (section 1)
+        result_definition: Raw result fields from the .action file (section 2)
+        feedback_definition: Raw feedback fields from the .action file (section 3)
+        dependencies: Optional additional {type_name: definition} for nested types
+            referenced by the goal/result/feedback fields.
+
+    Returns:
+        dict with keys:
+            'send_goal'       – hash for the {Name}_SendGoal service type
+            'get_result'      – hash for the {Name}_GetResult service type
+            'feedback_message'– hash for the {Name}_FeedbackMessage message type
+
+    Raises:
+        ValueError: If action_type format is invalid.
+    """
+    parts = action_type.split("/")
+    if len(parts) != 3 or parts[1] != "action":
+        raise ValueError(
+            f"Invalid action type format: {action_type}. Expected: pkg/action/Name"
+        )
+
+    # Standard types referenced by all synthesized action definitions
+    uuid_type = "unique_identifier_msgs/msg/UUID"
+    # UUID definition: a 16-byte fixed array – stable across all ROS2 distributions
+    uuid_def = "uint8[16] uuid"
+
+    goal_type = f"{action_type}_Goal"
+    result_type = f"{action_type}_Result"
+    feedback_type = f"{action_type}_Feedback"
+
+    # Base dependency dict: UUID + any caller-supplied extras
+    base_deps: Dict[str, str] = {uuid_type: uuid_def}
+    if dependencies:
+        base_deps.update(dependencies)
+
+    # --- send_goal service ---
+    # Request:  UUID goal_id  +  Goal goal
+    # Response: bool accepted +  builtin_interfaces/msg/Time stamp
+    send_goal_req_def = (
+        f"{uuid_type} goal_id\n"
+        f"{goal_type} goal"
+    )
+    send_goal_resp_def = (
+        "bool accepted\n"
+        "builtin_interfaces/msg/Time stamp"
+    )
+    # Include the goal type definition so compute_service_type_hash can resolve it
+    send_goal_deps = {**base_deps, goal_type: goal_definition}
+    send_goal_hash = compute_service_type_hash(
+        f"{action_type}_SendGoal",
+        send_goal_req_def,
+        send_goal_resp_def,
+        dependencies=send_goal_deps,
+    )
+
+    # --- get_result service ---
+    # Request:  UUID goal_id
+    # Response: int8 status  +  Result result
+    get_result_req_def = f"{uuid_type} goal_id"
+    get_result_resp_def = (
+        f"int8 status\n"
+        f"{result_type} result"
+    )
+    get_result_deps = {**base_deps, result_type: result_definition}
+    get_result_hash = compute_service_type_hash(
+        f"{action_type}_GetResult",
+        get_result_req_def,
+        get_result_resp_def,
+        dependencies=get_result_deps,
+    )
+
+    # --- FeedbackMessage (plain message, not a service) ---
+    # Fields: UUID goal_id  +  Feedback feedback
+    feedback_msg_def = (
+        f"{uuid_type} goal_id\n"
+        f"{feedback_type} feedback"
+    )
+    feedback_deps = {**base_deps, feedback_type: feedback_definition}
+    feedback_hash = compute_type_hash_from_msg(
+        f"{action_type}_FeedbackMessage",
+        feedback_msg_def,
+        dependencies=feedback_deps,
+    )
+
+    return {
+        "send_goal": send_goal_hash,
+        "get_result": get_result_hash,
+        "feedback_message": feedback_hash,
+    }
 
 
 def mangle_name(name: str) -> str:

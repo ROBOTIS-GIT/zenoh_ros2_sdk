@@ -181,6 +181,22 @@ python3 examples/20_subscribe_battery_state.py                   # subscribe to 
 python3 examples/20_subscribe_battery_state.py /my/battery/topic
 ```
 
+### [`21_action_client.py`](21_action_client.py)
+Demonstrates the full ROS2 action client workflow using `ROS2ActionClient`:
+- Sending a goal synchronously with a per-goal feedback callback.
+- Sending a goal asynchronously via `send_goal_async`.
+- Cancelling an in-progress goal with `GoalHandle.cancel()`.
+
+Uses the standard `example_interfaces/action/Fibonacci` action. Start the matching server first:
+```bash
+ros2 run action_tutorials_py fibonacci_action_server
+```
+
+**Usage:**
+```bash
+python3 examples/21_action_client.py
+```
+
 ## Running Examples
 
 Make sure you have:
