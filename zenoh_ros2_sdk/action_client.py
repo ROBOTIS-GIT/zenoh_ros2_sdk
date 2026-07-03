@@ -1,6 +1,7 @@
 """
 ROS2ActionClient - ROS2 Action Client using Zenoh
 """
+
 import zenoh
 from zenoh import Encoding
 import time
@@ -81,7 +82,6 @@ class ROS2ActionClient:
             """
             return self._client._call_cancel_goal(self.goal_id)
 
-
     def __init__(
         self,
         action_name: str,
@@ -136,7 +136,9 @@ class ROS2ActionClient:
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_action_client_{uuid.uuid4().hex[:8]}"
         self.timeout = timeout
-        _, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
+        _, self.qos = self._normalize_qos(
+            qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode()
+        )
 
         parts = action_type.split("/")
         if len(parts) != 3 or parts[1] != "action":
@@ -152,9 +154,7 @@ class ROS2ActionClient:
         try:
             registry.load_action_type(action_type)
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to load action type {action_type}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to load action type {action_type}: {e}") from e
 
         # Synthesized type names
         self._send_goal_req_type = f"{action_type}_SendGoal_Request"
@@ -167,30 +167,68 @@ class ROS2ActionClient:
         self._status_msg_type = "action_msgs/msg/GoalStatusArray"
 
         # Helper message classes for building nested request structs
-        self._goal_class = self.session_mgr.register_message_type(None, f"{action_type}_Goal")
-        self._uuid_class = self.session_mgr.register_message_type(None, "unique_identifier_msgs/msg/UUID")
-        self._time_class = self.session_mgr.register_message_type(None, "builtin_interfaces/msg/Time")
-        self._goal_info_class = self.session_mgr.register_message_type(None, "action_msgs/msg/GoalInfo")
+        self._goal_class = self.session_mgr.register_message_type(
+            None, f"{action_type}_Goal"
+        )
+        self._uuid_class = self.session_mgr.register_message_type(
+            None, "unique_identifier_msgs/msg/UUID"
+        )
+        self._time_class = self.session_mgr.register_message_type(
+            None, "builtin_interfaces/msg/Time"
+        )
+        self._goal_info_class = self.session_mgr.register_message_type(
+            None, "action_msgs/msg/GoalInfo"
+        )
 
         # Service/message request/response classes
-        self._send_goal_req_class = self.session_mgr.register_message_type(None, self._send_goal_req_type)
-        self._send_goal_resp_class = self.session_mgr.register_message_type(None, self._send_goal_resp_type)
-        self._get_result_req_class = self.session_mgr.register_message_type(None, self._get_result_req_type)
-        self._get_result_resp_class = self.session_mgr.register_message_type(None, self._get_result_resp_type)
-        self._cancel_goal_req_class = self.session_mgr.register_message_type(None, self._cancel_goal_req_type)
-        self._cancel_goal_resp_class = self.session_mgr.register_message_type(None, self._cancel_goal_resp_type)
-        self._feedback_msg_class = self.session_mgr.register_message_type(None, self._feedback_msg_type)
-        self._status_msg_class = self.session_mgr.register_message_type(None, self._status_msg_type)
+        self._send_goal_req_class = self.session_mgr.register_message_type(
+            None, self._send_goal_req_type
+        )
+        self._send_goal_resp_class = self.session_mgr.register_message_type(
+            None, self._send_goal_resp_type
+        )
+        self._get_result_req_class = self.session_mgr.register_message_type(
+            None, self._get_result_req_type
+        )
+        self._get_result_resp_class = self.session_mgr.register_message_type(
+            None, self._get_result_resp_type
+        )
+        self._cancel_goal_req_class = self.session_mgr.register_message_type(
+            None, self._cancel_goal_req_type
+        )
+        self._cancel_goal_resp_class = self.session_mgr.register_message_type(
+            None, self._cancel_goal_resp_type
+        )
+        self._feedback_msg_class = self.session_mgr.register_message_type(
+            None, self._feedback_msg_type
+        )
+        self._status_msg_class = self.session_mgr.register_message_type(
+            None, self._status_msg_type
+        )
 
         # Store type names (rosbags may remap srv/ types internally)
         _rt = self.session_mgr._registered_types
-        self._send_goal_req_store = _rt.get(self._send_goal_req_type, self._send_goal_req_type)
-        self._send_goal_resp_store = _rt.get(self._send_goal_resp_type, self._send_goal_resp_type)
-        self._get_result_req_store = _rt.get(self._get_result_req_type, self._get_result_req_type)
-        self._get_result_resp_store = _rt.get(self._get_result_resp_type, self._get_result_resp_type)
-        self._cancel_goal_req_store = _rt.get(self._cancel_goal_req_type, self._cancel_goal_req_type)
-        self._cancel_goal_resp_store = _rt.get(self._cancel_goal_resp_type, self._cancel_goal_resp_type)
-        self._feedback_msg_store = _rt.get(self._feedback_msg_type, self._feedback_msg_type)
+        self._send_goal_req_store = _rt.get(
+            self._send_goal_req_type, self._send_goal_req_type
+        )
+        self._send_goal_resp_store = _rt.get(
+            self._send_goal_resp_type, self._send_goal_resp_type
+        )
+        self._get_result_req_store = _rt.get(
+            self._get_result_req_type, self._get_result_req_type
+        )
+        self._get_result_resp_store = _rt.get(
+            self._get_result_resp_type, self._get_result_resp_type
+        )
+        self._cancel_goal_req_store = _rt.get(
+            self._cancel_goal_req_type, self._cancel_goal_req_type
+        )
+        self._cancel_goal_resp_store = _rt.get(
+            self._cancel_goal_resp_type, self._cancel_goal_resp_type
+        )
+        self._feedback_msg_store = _rt.get(
+            self._feedback_msg_type, self._feedback_msg_type
+        )
         self._status_msg_store = _rt.get(self._status_msg_type, self._status_msg_type)
 
         # Compute type hashes for all 5 endpoints
@@ -240,16 +278,35 @@ class ROS2ActionClient:
         _feedback_topic = f"{action_name}/_action/feedback"
         _status_topic = f"{action_name}/_action/status"
 
-        self._send_goal_keyexpr = topic_keyexpr(self.domain_id, _send_goal_topic, self._send_goal_dds, self._send_goal_hash)
-        self._get_result_keyexpr = topic_keyexpr(self.domain_id, _get_result_topic, self._get_result_dds, self._get_result_hash)
-        self._cancel_goal_keyexpr = topic_keyexpr(self.domain_id, _cancel_goal_topic, self._cancel_goal_dds, self._cancel_goal_hash)
-        self._feedback_keyexpr = topic_keyexpr(self.domain_id, _feedback_topic, self._feedback_dds, self._feedback_hash)
-        self._status_keyexpr = topic_keyexpr(self.domain_id, _status_topic, self._status_dds, self._status_hash)
+        self._send_goal_keyexpr = topic_keyexpr(
+            self.domain_id, _send_goal_topic, self._send_goal_dds, self._send_goal_hash
+        )
+        self._get_result_keyexpr = topic_keyexpr(
+            self.domain_id,
+            _get_result_topic,
+            self._get_result_dds,
+            self._get_result_hash,
+        )
+        self._cancel_goal_keyexpr = topic_keyexpr(
+            self.domain_id,
+            _cancel_goal_topic,
+            self._cancel_goal_dds,
+            self._cancel_goal_hash,
+        )
+        self._feedback_keyexpr = topic_keyexpr(
+            self.domain_id, _feedback_topic, self._feedback_dds, self._feedback_hash
+        )
+        self._status_keyexpr = topic_keyexpr(
+            self.domain_id, _status_topic, self._status_dds, self._status_hash
+        )
 
         # Declare liveliness tokens
         self._declare_liveliness_tokens(
-            _send_goal_topic, _get_result_topic, _cancel_goal_topic,
-            _feedback_topic, _status_topic,
+            _send_goal_topic,
+            _get_result_topic,
+            _cancel_goal_topic,
+            _feedback_topic,
+            _status_topic,
         )
 
         # Declare queriers
@@ -284,7 +341,6 @@ class ROS2ActionClient:
             self._status_keyexpr, self._status_listener
         )
 
-
     @staticmethod
     def _normalize_qos(
         qos: Optional[object],
@@ -300,7 +356,6 @@ class ROS2ActionClient:
         if isinstance(qos, str):
             return QosProfile.decode(qos), qos
         return default, fallback
-
 
     def _compute_type_hashes(self, action_type: str, registry) -> dict:
         """Compute ROS2 type hashes for all 5 action endpoints."""
@@ -322,9 +377,15 @@ class ROS2ActionClient:
         feedback_def = sections[2].strip()
 
         # Gather dependencies for goal/result/feedback fields
-        goal_deps = load_dependencies_recursive(f"{action_type}_Goal", goal_def, registry)
-        result_deps = load_dependencies_recursive(f"{action_type}_Result", result_def, registry)
-        feedback_deps = load_dependencies_recursive(f"{action_type}_Feedback", feedback_def, registry)
+        goal_deps = load_dependencies_recursive(
+            f"{action_type}_Goal", goal_def, registry
+        )
+        result_deps = load_dependencies_recursive(
+            f"{action_type}_Result", result_def, registry
+        )
+        feedback_deps = load_dependencies_recursive(
+            f"{action_type}_Feedback", feedback_def, registry
+        )
         action_deps = {**goal_deps, **result_deps, **feedback_deps}
 
         # Hashes for send_goal, get_result, feedback_message
@@ -343,8 +404,12 @@ class ROS2ActionClient:
         cancel_req_def = cancel_parts[0].strip()
         cancel_resp_def = cancel_parts[1].strip() if len(cancel_parts) > 1 else ""
         cancel_deps = {
-            **load_dependencies_recursive("action_msgs/srv/CancelGoal_Request", cancel_req_def, registry),
-            **load_dependencies_recursive("action_msgs/srv/CancelGoal_Response", cancel_resp_def, registry),
+            **load_dependencies_recursive(
+                "action_msgs/srv/CancelGoal_Request", cancel_req_def, registry
+            ),
+            **load_dependencies_recursive(
+                "action_msgs/srv/CancelGoal_Response", cancel_resp_def, registry
+            ),
         }
         cancel_goal_hash = compute_service_type_hash(
             cancel_srv, cancel_req_def, cancel_resp_def, dependencies=cancel_deps
@@ -358,7 +423,9 @@ class ROS2ActionClient:
         with open(status_file, "r") as f:
             status_def = f.read()
         status_deps = load_dependencies_recursive(status_msg, status_def, registry)
-        status_hash = get_type_hash(status_msg, msg_definition=status_def, dependencies=status_deps)
+        status_hash = get_type_hash(
+            status_msg, msg_definition=status_def, dependencies=status_deps
+        )
 
         return {
             "send_goal": action_hashes["send_goal"],
@@ -367,7 +434,6 @@ class ROS2ActionClient:
             "cancel_goal": cancel_goal_hash,
             "status": status_hash,
         }
-
 
     def _declare_liveliness_tokens(
         self,
@@ -391,41 +457,69 @@ class ROS2ActionClient:
 
         def _sc(entity_id, name, dds_type, type_hash, gid):
             ep = EndpointEntity(
-                node=node, entity_id=entity_id, kind=EntityKind.CLIENT,
-                name=name, dds_type_name=dds_type, type_hash=type_hash,
-                qos=self.qos, gid=gid,
+                node=node,
+                entity_id=entity_id,
+                kind=EntityKind.CLIENT,
+                name=name,
+                dds_type_name=dds_type,
+                type_hash=type_hash,
+                qos=self.qos,
+                gid=gid,
             )
-            return self.session_mgr.liveliness.declare_token(endpoint_liveliness_keyexpr(ep))
+            return self.session_mgr.liveliness.declare_token(
+                endpoint_liveliness_keyexpr(ep)
+            )
 
         def _ms(entity_id, name, dds_type, type_hash, gid):
             ep = EndpointEntity(
-                node=node, entity_id=entity_id, kind=EntityKind.SUBSCRIPTION,
-                name=name, dds_type_name=dds_type, type_hash=type_hash,
-                qos=self.qos, gid=gid,
+                node=node,
+                entity_id=entity_id,
+                kind=EntityKind.SUBSCRIPTION,
+                name=name,
+                dds_type_name=dds_type,
+                type_hash=type_hash,
+                qos=self.qos,
+                gid=gid,
             )
-            return self.session_mgr.liveliness.declare_token(endpoint_liveliness_keyexpr(ep))
+            return self.session_mgr.liveliness.declare_token(
+                endpoint_liveliness_keyexpr(ep)
+            )
 
         self._send_goal_token = _sc(
-            self._send_goal_entity_id, send_goal_topic,
-            self._send_goal_dds, self._send_goal_hash, self._send_goal_gid,
+            self._send_goal_entity_id,
+            send_goal_topic,
+            self._send_goal_dds,
+            self._send_goal_hash,
+            self._send_goal_gid,
         )
         self._get_result_token = _sc(
-            self._get_result_entity_id, get_result_topic,
-            self._get_result_dds, self._get_result_hash, self._get_result_gid,
+            self._get_result_entity_id,
+            get_result_topic,
+            self._get_result_dds,
+            self._get_result_hash,
+            self._get_result_gid,
         )
         self._cancel_goal_token = _sc(
-            self._cancel_goal_entity_id, cancel_goal_topic,
-            self._cancel_goal_dds, self._cancel_goal_hash, self._cancel_goal_gid,
+            self._cancel_goal_entity_id,
+            cancel_goal_topic,
+            self._cancel_goal_dds,
+            self._cancel_goal_hash,
+            self._cancel_goal_gid,
         )
         self._feedback_token = _ms(
-            self._feedback_entity_id, feedback_topic,
-            self._feedback_dds, self._feedback_hash, self._feedback_gid,
+            self._feedback_entity_id,
+            feedback_topic,
+            self._feedback_dds,
+            self._feedback_hash,
+            self._feedback_gid,
         )
         self._status_token = _ms(
-            self._status_entity_id, status_topic,
-            self._status_dds, self._status_hash, self._status_gid,
+            self._status_entity_id,
+            status_topic,
+            self._status_dds,
+            self._status_hash,
+            self._status_gid,
         )
-
 
     def _next_seq(self) -> int:
         """Return and increment the monotonic per-client CDR sequence number."""
@@ -529,7 +623,9 @@ class ROS2ActionClient:
         def _on_reply(reply: zenoh.Reply):
             try:
                 cdr = self._extract_reply_payload(reply)
-                callback(self._deserialize(cdr, resp_store_type) if cdr is not None else None)
+                callback(
+                    self._deserialize(cdr, resp_store_type) if cdr is not None else None
+                )
             except Exception as e:
                 logger.error(f"Error processing async action reply: {e}", exc_info=True)
                 callback(None)
@@ -541,7 +637,6 @@ class ROS2ActionClient:
             encoding=Encoding("application/cdr"),
             attachment=zenoh.ZBytes(attachment),
         )
-
 
     def send_goal(
         self,
@@ -582,8 +677,11 @@ class ROS2ActionClient:
         request = self._build_send_goal_request(goal_id, kwargs)
         payload = self._serialize(request, self._send_goal_req_store)
         response = self._run_query(
-            self._send_goal_querier, payload, self._send_goal_gid,
-            self._send_goal_resp_store, timeout=self.timeout,
+            self._send_goal_querier,
+            payload,
+            self._send_goal_gid,
+            self._send_goal_resp_store,
+            timeout=self.timeout,
         )
 
         if response is None or not response.accepted:
@@ -628,11 +726,16 @@ class ROS2ActionClient:
                     self._feedback_callbacks.pop(goal_id_key, None)
                 callback(None)
             else:
-                callback(ROS2ActionClient.GoalHandle(goal_id_key, accepted=True, client=self))
+                callback(
+                    ROS2ActionClient.GoalHandle(goal_id_key, accepted=True, client=self)
+                )
 
         self._run_query_async(
-            self._send_goal_querier, payload, self._send_goal_gid,
-            self._send_goal_resp_store, callback=_on_response,
+            self._send_goal_querier,
+            payload,
+            self._send_goal_gid,
+            self._send_goal_resp_store,
+            callback=_on_response,
         )
 
     def _build_send_goal_request(self, goal_id: bytes, goal_kwargs: dict):
@@ -640,7 +743,6 @@ class ROS2ActionClient:
         uuid_msg = self._make_uuid_msg(goal_id)
         goal_msg = self._goal_class(**goal_kwargs)
         return self._send_goal_req_class(goal_id=uuid_msg, goal=goal_msg)
-
 
     def _call_get_result(
         self, goal_id: bytes, timeout: Optional[float] = None
@@ -650,8 +752,11 @@ class ROS2ActionClient:
         request = self._get_result_req_class(goal_id=uuid_msg)
         payload = self._serialize(request, self._get_result_req_store)
         return self._run_query(
-            self._get_result_querier, payload, self._get_result_gid,
-            self._get_result_resp_store, timeout=timeout,
+            self._get_result_querier,
+            payload,
+            self._get_result_gid,
+            self._get_result_resp_store,
+            timeout=timeout,
         )
 
     def _call_cancel_goal(self, goal_id: bytes) -> Optional[object]:
@@ -662,10 +767,12 @@ class ROS2ActionClient:
         request = self._cancel_goal_req_class(goal_info=goal_info)
         payload = self._serialize(request, self._cancel_goal_req_store)
         return self._run_query(
-            self._cancel_goal_querier, payload, self._cancel_goal_gid,
-            self._cancel_goal_resp_store, timeout=self.timeout,
+            self._cancel_goal_querier,
+            payload,
+            self._cancel_goal_gid,
+            self._cancel_goal_resp_store,
+            timeout=self.timeout,
         )
-
 
     def _feedback_router(self, sample) -> None:
         """Deserialize a FeedbackMessage and dispatch to the registered callback."""
@@ -687,11 +794,9 @@ class ROS2ActionClient:
         except Exception as e:
             logger.error(f"Error in feedback router: {e}", exc_info=True)
 
-
     def _status_listener(self, sample) -> None:
         """Receive GoalStatusArray updates (no-op by default; subclass to override)."""
         pass
-
 
     def close(self) -> None:
         """Undeclare all liveliness tokens, queriers, and subscribers.
@@ -706,8 +811,11 @@ class ROS2ActionClient:
 
         tokens = [
             "node_token",
-            "_send_goal_token", "_get_result_token", "_cancel_goal_token",
-            "_feedback_token", "_status_token",
+            "_send_goal_token",
+            "_get_result_token",
+            "_cancel_goal_token",
+            "_feedback_token",
+            "_status_token",
         ]
         queriers = ["_send_goal_querier", "_get_result_querier", "_cancel_goal_querier"]
         subscribers = ["_feedback_sub", "_status_sub"]
@@ -735,10 +843,12 @@ class ROS2ActionClient:
 
             self._closed = True
         except (AttributeError, RuntimeError) as e:
-            logger.debug(f"Error during action client cleanup for {self.action_name}: {e}")
+            logger.debug(
+                f"Error during action client cleanup for {self.action_name}: {e}"
+            )
             self._closed = True
         except Exception as e:
-            logger.warning(f"Unexpected error during action client cleanup for {self.action_name}: {e}")
+            logger.warning(
+                f"Unexpected error during action client cleanup for {self.action_name}: {e}"
+            )
             self._closed = True
-
-
