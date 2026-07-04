@@ -61,27 +61,16 @@ def main():
         # ------------------------------------------------------------------ #
         print("--- Sending goal asynchronously (order=5) ---")
 
-        async_result_holder = {"goal": None, "result": None}
-
-        def on_goal_response(handle):
-            if handle is None:
-                print("  Async goal rejected.")
+        def on_result(result):
+            if result is None:
+                print("  Async goal rejected or failed.")
                 return
-            print(f"  Async goal accepted (id: {handle.goal_id.hex()})")
-            async_result_holder["goal"] = handle
+            print(f"  Async result: sequence = {list(result.result.sequence)}\n")
 
-        client.send_goal_async(callback=on_goal_response, order=5)
+        client.send_goal_async(callback=on_result, order=5)
 
-        # Give the server time to accept and process the goal.
-        time.sleep(1.0)
-
-        handle = async_result_holder["goal"]
-        if handle is not None:
-            result = handle.get_result(timeout=15.0)
-            if result is not None:
-                print(f"  Async result: sequence = {list(result.result.sequence)}\n")
-            else:
-                print("  Async get_result timed out.\n")
+        # Give the server time to process the goal and return the result.
+        time.sleep(5.0)
 
         # ------------------------------------------------------------------ #
         # 3. Cancel a goal mid-execution                                      #

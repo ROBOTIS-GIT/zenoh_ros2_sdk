@@ -256,6 +256,7 @@ class ROS2ActionClient:
         self._sequence_number = 1
         self._seq_lock = threading.Lock()
         self._closed = False
+        self._close_lock = threading.Lock()
 
         # Per-endpoint GIDs and entity IDs
         self._send_goal_gid = self.session_mgr.generate_gid()
@@ -532,9 +533,13 @@ class ROS2ActionClient:
         """Wrap 16 raw bytes into a UUID message object."""
         return self._uuid_class(uuid=np.frombuffer(goal_id_bytes, dtype=np.uint8))
 
-    def _goal_id_to_key(self, uuid_msg) -> bytes:
+    def _goal_id_to_key(self, uuid_msg) -> Optional[bytes]:
         """Extract a hashable bytes key from a UUID message field."""
-        raw = uuid_msg.uuid
+        if uuid_msg is None:
+            return None
+        raw = getattr(uuid_msg, "uuid", None)
+        if raw is None:
+            return None
         if hasattr(raw, "tobytes"):
             return raw.tobytes()
         return bytes(raw)
@@ -572,6 +577,10 @@ class ROS2ActionClient:
         timeout: Optional[float],
     ) -> Optional[object]:
         """Send a Zenoh query and block until a response arrives or the timeout elapses."""
+        if querier is None:
+            logger.error("Cannot run query: querier is None (client may be closed)")
+            return None
+
         attachment = Attachment(
             sequence_id=self._next_seq(),
             timestamp_ns=int(time.time() * 1e9),
@@ -580,8 +589,15 @@ class ROS2ActionClient:
 
         event = threading.Event()
         result: dict = {"response": None}
+        called = False
+        lock = threading.Lock()
 
         def _on_reply(reply: zenoh.Reply):
+            nonlocal called
+            with lock:
+                if called:
+                    return
+                called = True
             try:
                 cdr = self._extract_reply_payload(reply)
                 if cdr is not None:
@@ -614,13 +630,26 @@ class ROS2ActionClient:
         callback: Callable,
     ) -> None:
         """Send a Zenoh query and invoke a callback when the reply arrives."""
+        if querier is None:
+            logger.error("Cannot run query: querier is None (client may be closed)")
+            callback(None)
+            return
+
         attachment = Attachment(
             sequence_id=self._next_seq(),
             timestamp_ns=int(time.time() * 1e9),
             gid=gid,
         ).to_bytes()
 
+        called = False
+        lock = threading.Lock()
+
         def _on_reply(reply: zenoh.Reply):
+            nonlocal called
+            with lock:
+                if called:
+                    return
+                called = True
             try:
                 cdr = self._extract_reply_payload(reply)
                 callback(
@@ -703,8 +732,8 @@ class ROS2ActionClient:
         invoked from Zenoh background threads and must be thread-safe.
 
         Args:
-            callback: Called with a GoalHandle when the goal is accepted, or
-                with None when rejected or on error.
+            callback: Called with the GetResult_Response object when the result
+                is ready, or with None when the goal was rejected or on error.
             feedback_callback: Optional callable invoked as
                 ``feedback_callback(feedback_msg)`` for each feedback message
                 published for this goal.
@@ -726,9 +755,7 @@ class ROS2ActionClient:
                     self._feedback_callbacks.pop(goal_id_key, None)
                 callback(None)
             else:
-                callback(
-                    ROS2ActionClient.GoalHandle(goal_id_key, accepted=True, client=self)
-                )
+                self._call_get_result_async(goal_id_key, callback)
 
         self._run_query_async(
             self._send_goal_querier,
@@ -759,6 +786,19 @@ class ROS2ActionClient:
             timeout=timeout,
         )
 
+    def _call_get_result_async(self, goal_id: bytes, callback: Callable) -> None:
+        """Build and send a GetResult_Request asynchronously; invoke callback with the response."""
+        uuid_msg = self._make_uuid_msg(goal_id)
+        request = self._get_result_req_class(goal_id=uuid_msg)
+        payload = self._serialize(request, self._get_result_req_store)
+        self._run_query_async(
+            self._get_result_querier,
+            payload,
+            self._get_result_gid,
+            self._get_result_resp_store,
+            callback=callback,
+        )
+
     def _call_cancel_goal(self, goal_id: bytes) -> Optional[object]:
         """Build and send a CancelGoal_Request; block until the response arrives or timeout."""
         uuid_msg = self._make_uuid_msg(goal_id)
@@ -785,8 +825,13 @@ class ROS2ActionClient:
                 return
 
             msg = self._deserialize(cdr_bytes, self._feedback_msg_store)
+            if msg is None:
+                return
 
             goal_id_key = self._goal_id_to_key(msg.goal_id)
+            if goal_id_key is None:
+                return
+
             with self._feedback_lock:
                 cb = self._feedback_callbacks.get(goal_id_key)
             if cb is not None:
@@ -806,8 +851,10 @@ class ROS2ActionClient:
         threads for each subscriber that block interpreter shutdown until they
         are undeclared.
         """
-        if getattr(self, "_closed", False):
-            return
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
 
         tokens = [
             "node_token",
