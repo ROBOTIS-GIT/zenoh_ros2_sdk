@@ -141,7 +141,7 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
     # Reference: https://github.com/ROBOTIS-GIT/physical_ai_tools/tree/main/physical_ai_interfaces
     "physical_ai_tools": MessageRepository(
         url="https://github.com/ROBOTIS-GIT/physical_ai_tools.git",
-        commit="feature-temp-merge",
+        commit="main",
         cache_path="physical_ai_tools",
         msg_path="",
         packages=[
@@ -152,7 +152,7 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
     # Reference: https://github.com/ROBOTIS-GIT/cyclo_intelligence/tree/main/interfaces
     "cyclo_intelligence": MessageRepository(
         url="https://github.com/ROBOTIS-GIT/cyclo_intelligence.git",
-        commit="feature-code-optimization",
+        commit="main",
         cache_path="cyclo_intelligence",
         msg_path="",
         packages=[
