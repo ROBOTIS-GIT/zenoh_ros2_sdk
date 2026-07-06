@@ -928,14 +928,18 @@ def load_dependencies_recursive(
     for dep_type in dep_types:
         if dep_type not in visited:
             dep_file = registry.get_msg_file_path(dep_type)
-            if dep_file and dep_file.exists():
-                with open(dep_file, 'r') as f:
-                    dep_def = f.read()
-                all_dependencies[dep_type] = dep_def
+            if not dep_file or not dep_file.exists():
+                raise FileNotFoundError(
+                    f"Dependency message definition not found: {dep_type} "
+                    f"(referenced by {msg_type})"
+                )
+            with open(dep_file, 'r') as f:
+                dep_def = f.read()
+            all_dependencies[dep_type] = dep_def
 
-                # Recursively load dependencies of this dependency
-                nested_deps = load_dependencies_recursive(dep_type, dep_def, registry, visited)
-                all_dependencies.update(nested_deps)
+            # Recursively load dependencies of this dependency.
+            nested_deps = load_dependencies_recursive(dep_type, dep_def, registry, visited)
+            all_dependencies.update(nested_deps)
 
     return all_dependencies
 

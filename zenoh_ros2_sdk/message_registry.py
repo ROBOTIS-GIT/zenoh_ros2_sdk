@@ -208,6 +208,9 @@ class MessageRegistry:
         if not response_definition:
             raise ValueError(f"Empty response definition in service file for {srv_type}")
 
+        request_definition_reg = self._expand_type_refs(request_definition, namespace_part)
+        response_definition_reg = self._expand_type_refs(response_definition, namespace_part)
+
         # Extract dependencies for request and response
         request_deps = self._extract_dependencies(request_definition, request_type)
         response_deps = self._extract_dependencies(response_definition, response_type)
@@ -218,19 +221,16 @@ class MessageRegistry:
                 try:
                     self._load_dependencies(dep_type, visited.copy())
                 except Exception as e:
-                    logger.error(
-                        f"Failed to load dependency {dep_type} for service {srv_type}: {e}. "
-                        f"This may cause service type registration to fail."
-                    )
-                    # Continue loading other dependencies, but log the error
-                    # The registration will fail later if the dependency is truly required
+                    raise RuntimeError(
+                        f"Failed to load dependency {dep_type} for service {srv_type}: {e}"
+                    ) from e
 
         # Register request and response types
         try:
             if request_type not in self.session._registered_types:
-                self.session.register_message_type(request_definition, request_type)
+                self.session.register_message_type(request_definition_reg, request_type)
             if response_type not in self.session._registered_types:
-                self.session.register_message_type(response_definition, response_type)
+                self.session.register_message_type(response_definition_reg, response_type)
         except Exception as e:
             raise RuntimeError(
                 f"Failed to register service types for {srv_type}: {e}. "
@@ -461,9 +461,9 @@ class MessageRegistry:
                 try:
                     self._load_dependencies(dep, visited.copy())
                 except Exception as e:
-                    logger.warning(
+                    raise RuntimeError(
                         f"Failed to load standard dependency {dep} for action {action_type}: {e}"
-                    )
+                    ) from e
 
         # --- Load goal/result/feedback field dependencies ---
         for raw_def, raw_type in [
@@ -476,10 +476,9 @@ class MessageRegistry:
                     try:
                         self._load_dependencies(dep, visited.copy())
                     except Exception as e:
-                        logger.error(
-                            f"Failed to load dependency {dep} for action {action_type}: {e}. "
-                            "This may cause action type registration to fail."
-                        )
+                        raise RuntimeError(
+                            f"Failed to load dependency {dep} for action {action_type}: {e}"
+                        ) from e
 
         # --- Register Goal, Result, Feedback from raw action file sections ---
         for reg_def, raw_type in [
@@ -531,14 +530,18 @@ class MessageRegistry:
             try:
                 self._load_service_types(cancel_srv, visited.copy())
             except Exception as e:
-                logger.warning(f"Failed to load cancel_goal service type for {action_type}: {e}")
+                raise RuntimeError(
+                    f"Failed to load cancel_goal service type for {action_type}: {e}"
+                ) from e
 
         status_msg = "action_msgs/msg/GoalStatusArray"
         if status_msg not in self._loaded_types:
             try:
                 self._load_dependencies(status_msg, visited.copy())
             except Exception as e:
-                logger.warning(f"Failed to load GoalStatusArray for {action_type}: {e}")
+                raise RuntimeError(
+                    f"Failed to load GoalStatusArray for {action_type}: {e}"
+                ) from e
 
         self._loaded_types.add(action_type)
 

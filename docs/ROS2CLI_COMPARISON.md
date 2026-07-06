@@ -90,6 +90,6 @@ Discovery uses the same liveliness keyexpr format as **rmw_zenoh** (see the rmw_
 
 - **No interactive topic selection** in `zenoh-ros2 topic info`: topic name is required (ros2cli can prompt when omitted).
 - **No endpoint GID in verbose**: discovery is from Zenoh liveliness keyexprs only; GID is not part of the token format, so we do not print it.
-- **Discovery scope**: rclpy uses ROS 2 DDS/liveliness; we use Zenoh liveliness only. We only see endpoints that declare `@ros2_lv/...` (this SDK, rmw_zenoh, ros-z). Behavior is aligned for that subset.
+- **Discovery scope**: rclpy uses ROS 2 DDS/liveliness; we use Zenoh liveliness only. We only see endpoints that declare `@ros2_lv/...` (this SDK, rmw_zenoh, Hiroz). Behavior is aligned for that subset.
 
 With the above, the SDK’s `zenoh-ros2 topic list` and `zenoh-ros2 topic info` behavior matches ros2cli’s logic and output format as closely as Zenoh-based discovery allows.

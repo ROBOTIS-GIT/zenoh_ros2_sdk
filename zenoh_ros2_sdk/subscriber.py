@@ -61,7 +61,11 @@ class ROS2Subscriber:
         self.node_name = node_name or f"zenoh_subscriber_{uuid.uuid4().hex[:8]}"
         # QoS is only used for liveliness discovery tokens. It does not affect the
         # data keyexpr subscription (which is topic/type-hash based).
-        _, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
+        _, self.qos = self._normalize_qos(
+            qos,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
 
         # Get or create shared session
         self.session_mgr = ZenohSession.get_instance(router_ip, router_port)
@@ -79,17 +83,11 @@ class ROS2Subscriber:
             # Empty string ("") is valid for messages with no fields (like std_msgs/msg/Empty)
             hash_msg_definition = msg_definition
             if hash_msg_definition is None:
-                # Load from registry (same logic as register_message_type)
-                try:
-                    registry = get_registry()
-                    msg_file = registry.get_msg_file_path(msg_type)
-                    if msg_file and msg_file.exists():
-                        with open(msg_file, 'r') as f:
-                            hash_msg_definition = f.read()
-                except Exception as e:
-                    # Registry not available or file not found - will raise ValueError below
-                    logger.debug(f"Could not load message definition from registry for {msg_type}: {e}")
-                    pass
+                registry = get_registry()
+                msg_file = registry.get_msg_file_path(msg_type)
+                if msg_file and msg_file.exists():
+                    with open(msg_file, 'r') as f:
+                        hash_msg_definition = f.read()
 
             # If still None after trying to load, raise error
             if hash_msg_definition is None:
@@ -99,16 +97,14 @@ class ROS2Subscriber:
                 )
 
             # Get dependencies from message registry if available (recursively)
-            dependencies = None
             try:
                 registry = get_registry()
                 # Load all dependencies recursively using shared utility function
                 dependencies = load_dependencies_recursive(msg_type, hash_msg_definition, registry)
             except Exception as e:
-                # If dependency loading fails, continue without dependencies
-                # Type hash computation will still work, just without nested type info
-                logger.debug(f"Could not load dependencies for {msg_type}: {e}")
-                pass
+                raise RuntimeError(
+                    f"Failed to load complete dependency tree for {msg_type}: {e}"
+                ) from e
 
             type_hash = get_type_hash(msg_type, msg_definition=hash_msg_definition, dependencies=dependencies)
         self.type_hash = type_hash
@@ -131,7 +127,11 @@ class ROS2Subscriber:
 
         # For transient_local durability, query for cached/historical data
         # This mimics rmw_zenoh's AdvancedSubscriber behavior
-        self.qos_profile, _ = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
+        self.qos_profile, _ = self._normalize_qos(
+            qos,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
         if self.qos_profile.durability == QosDurability.TRANSIENT_LOCAL:
             self._query_historical_data()
 
@@ -140,20 +140,20 @@ class ROS2Subscriber:
         qos: Optional[object],
         *,
         default: QosProfile,
-        fallback: str,
+        default_encoded: str,
     ) -> tuple[QosProfile, str]:
         """
         Subscriber only needs the encoded QoS string for tokens, but we normalize
         similarly to publisher for API consistency.
         """
         if qos is None:
-            return default, fallback
+            return default, default_encoded
         if isinstance(qos, QosProfile):
             return qos, qos.encode()
         if isinstance(qos, str):
             # User provided an authoritative encoded QoS string. It must be parseable.
             return QosProfile.decode(qos), qos
-        return default, fallback
+        return default, default_encoded
 
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""
@@ -291,7 +291,7 @@ class ROS2Subscriber:
             return
 
         try:
-            # Undeclare liveliness tokens first (best-effort)
+            # Undeclare liveliness tokens before the subscriber.
             if hasattr(self, "subscriber_token") and self.subscriber_token is not None:
                 self.subscriber_token.undeclare()
                 self.subscriber_token = None

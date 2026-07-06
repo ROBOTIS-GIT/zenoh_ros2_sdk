@@ -68,7 +68,7 @@ def _apply_zenoh_config_override(conf: "zenoh.Config", override: str) -> None:
     """
     Apply override pairs onto an existing config (later entries win).
 
-    Values are parsed as JSON5 first (like ros-z), then serialized to JSON
+    Values are parsed as JSON5 first, matching rmw_zenoh override handling, then serialized to JSON
     before being passed to `insert_json5`.
     """
     for path, json5_value in _parse_zenoh_config_override(override):
@@ -365,4 +365,3 @@ class ZenohSession:
         if self.session:
             self.session.close()
             ZenohSession._instance = None
-

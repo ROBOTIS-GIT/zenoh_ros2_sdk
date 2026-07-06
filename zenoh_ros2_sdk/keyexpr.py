@@ -1,5 +1,5 @@
 """
-Key expression builders aligned with rmw_zenoh_cpp design.md and ros-z implementation.
+Key expression builders aligned with rmw_zenoh_cpp design.md.
 """
 
 from __future__ import annotations
@@ -57,4 +57,3 @@ def endpoint_liveliness_keyexpr(ep: EndpointEntity) -> str:
         f"{enclave}/{namespace}/{node_name}/"
         f"{qualified_name}/{ep.dds_type_name}/{ep.type_hash}/{ep.qos}"
     )
-

@@ -1,6 +1,6 @@
 # Concepts
 
-This SDK follows the same conventions as `rmw_zenoh_cpp` / `ros-z` so ROS tools can discover entities and (when applicable) publishers can behave like ROS 2 “publish-on-subscribe”.
+This SDK follows the same conventions as `rmw_zenoh_cpp` so ROS tools can discover entities and (when applicable) publishers can behave like ROS 2 "publish-on-subscribe".
 
 ## Domain ID
 
@@ -22,7 +22,7 @@ The SDK can auto-load message/service definitions (via the message registry) and
 
 ## QoS
 
-For graph compatibility, QoS information is encoded into discovery tokens using the compact `rmw_zenoh` / `ros-z` format.
+For graph compatibility, QoS information is encoded into discovery tokens using the compact `rmw_zenoh` format.
 
 In most APIs you can pass either:
 
@@ -32,4 +32,3 @@ In most APIs you can pass either:
 ## Sessions
 
 Publishers/subscribers/service endpoints share an underlying Zenoh session for efficiency (session pooling). Close resources when you’re done (`.close()`).
-

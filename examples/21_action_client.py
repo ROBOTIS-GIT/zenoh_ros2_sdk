@@ -35,39 +35,40 @@ def main():
         feedback_msgs = []
 
         def on_feedback(msg):
-            partial = list(msg.sequence)
+            partial = list(msg.feedback.sequence)
             feedback_msgs.append(partial)
             print(f"  [feedback] partial sequence: {partial}")
 
-        goal = client.send_goal(feedback_callback=on_feedback, order=10)
-
-        if goal is None:
-            print("Goal rejected or timed out.")
-            return
-
-        print(f"Goal accepted (id: {goal.goal_id.hex()})\n")
-
-        # Block until the server returns the final result.
-        result = goal.get_result(timeout=30.0)
+        result = client.send_goal(
+            feedback_callback=on_feedback,
+            order=10,
+            result_timeout=30.0,
+        )
 
         if result is not None:
             print(f"Result received: sequence = {list(result.result.sequence)}")
             print(f"Status: {result.status}\n")
         else:
-            print("get_result timed out or failed.\n")
+            print("Goal rejected, timed out, or failed.\n")
 
         # ------------------------------------------------------------------ #
         # 2. Asynchronous send_goal                                           #
         # ------------------------------------------------------------------ #
         print("--- Sending goal asynchronously (order=5) ---")
 
-        def on_result(result):
+        def on_goal_response(future):
+            goal = future.result()
+            if goal is None or not goal.accepted:
+                print("  Async goal rejected or timed out.")
+                return
+            result_future = goal.get_result_async(timeout=30.0)
+            result = result_future.result()
             if result is None:
-                print("  Async goal rejected or failed.")
+                print("  Async get_result timed out or failed.")
                 return
             print(f"  Async result: sequence = {list(result.result.sequence)}\n")
 
-        client.send_goal_async(callback=on_result, order=5)
+        client.send_goal_async(order=5).add_done_callback(on_goal_response)
 
         # Give the server time to process the goal and return the result.
         time.sleep(5.0)
@@ -77,12 +78,13 @@ def main():
         # ------------------------------------------------------------------ #
         print("--- Sending goal and then cancelling it (order=20) ---")
 
-        goal = client.send_goal(order=20)
+        goal_future = client.send_goal_async(order=20)
+        goal = goal_future.result()
 
-        if goal is not None:
+        if goal is not None and goal.accepted:
             print(f"  Goal accepted (id: {goal.goal_id.hex()})")
             time.sleep(0.5)
-            cancel_response = goal.cancel()
+            cancel_response = goal.cancel_goal()
             if cancel_response is not None:
                 goals_cancelling = getattr(cancel_response, "goals_canceling", None)
                 n = len(goals_cancelling) if goals_cancelling is not None else "?"

@@ -2,7 +2,7 @@
 """
 10 - Service Server (Queue mode)
 
-Demonstrates ros-z style service handling:
+Demonstrates rmw_zenoh-style service handling:
 - server enqueues requests (take_request)
 - user sends response later (send_response) using a correlation key
 
@@ -50,4 +50,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

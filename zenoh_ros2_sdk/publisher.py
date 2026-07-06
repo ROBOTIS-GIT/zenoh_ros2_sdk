@@ -39,7 +39,7 @@ class ROS2Publisher:
         router_port: int = 7447,
         type_hash: Optional[str] = None,
         qos: Optional[object] = None,
-        strict_zenoh_qos: bool = False,
+        strict_zenoh_qos: bool = True,
     ):
         """
         Create a ROS2 publisher.
@@ -54,10 +54,11 @@ class ROS2Publisher:
             router_ip: Zenoh router IP
             router_port: Zenoh router port
             type_hash: Message type hash (auto-detected if None)
-            qos: QoS used for liveliness discovery tokens and (best-effort) Zenoh publisher settings.
+            qos: QoS used for liveliness discovery tokens and Zenoh publisher settings.
                 Accepts `QosProfile`, an encoded rmw_zenoh QoS string, or `None` for default.
-            strict_zenoh_qos: If True, raise if the Zenoh Python API cannot apply QoS mapping
-                (e.g., `congestion_control` / `express` options).
+            strict_zenoh_qos: If True, raise if the Zenoh Python API cannot apply
+                the requested QoS mapping. Set False only to allow compatibility
+                mode with older Zenoh Python APIs.
 
         Raises:
             ValueError: If the type hash cannot be computed because message definitions are missing.
@@ -69,7 +70,7 @@ class ROS2Publisher:
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_publisher_{uuid.uuid4().hex[:8]}"
         self.strict_zenoh_qos = strict_zenoh_qos
-        # QoS is used both for liveliness tokens and (best-effort) mapping to Zenoh settings.
+        # QoS is used both for liveliness tokens and Zenoh publisher settings.
         self.qos_profile, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE)
 
         # Get or create shared session
@@ -88,17 +89,11 @@ class ROS2Publisher:
             # Empty string ("") is valid for messages with no fields (like std_msgs/msg/Empty)
             hash_msg_definition = msg_definition
             if hash_msg_definition is None:
-                # Load from registry (same logic as register_message_type)
-                try:
-                    registry = get_registry()
-                    msg_file = registry.get_msg_file_path(msg_type)
-                    if msg_file and msg_file.exists():
-                        with open(msg_file, 'r') as f:
-                            hash_msg_definition = f.read()
-                except Exception as e:
-                    # Registry not available or file not found - will raise ValueError below
-                    logger.debug(f"Could not load message definition from registry for {msg_type}: {e}")
-                    pass
+                registry = get_registry()
+                msg_file = registry.get_msg_file_path(msg_type)
+                if msg_file and msg_file.exists():
+                    with open(msg_file, 'r') as f:
+                        hash_msg_definition = f.read()
 
             # If still None after trying to load, raise error
             if hash_msg_definition is None:
@@ -108,16 +103,14 @@ class ROS2Publisher:
                 )
 
             # Get dependencies from message registry if available (recursively)
-            dependencies = None
             try:
                 registry = get_registry()
                 # Load all dependencies recursively using shared utility function
                 dependencies = load_dependencies_recursive(msg_type, hash_msg_definition, registry)
             except Exception as e:
-                # If dependency loading fails, continue without dependencies
-                # Type hash computation will still work, just without nested type info
-                logger.debug(f"Could not load dependencies for {msg_type}: {e}")
-                pass
+                raise RuntimeError(
+                    f"Failed to load complete dependency tree for {msg_type}: {e}"
+                ) from e
 
             type_hash = get_type_hash(msg_type, msg_definition=hash_msg_definition, dependencies=dependencies)
         self.type_hash = type_hash
@@ -186,28 +179,24 @@ class ROS2Publisher:
 
     def _declare_zenoh_publisher(self, keyexpr: str):
         """
-        Best-effort QoS -> Zenoh mapping (similar to ros-z):
+        QoS -> Zenoh mapping aligned with rmw_zenoh behavior:
         - Reliable => congestion_control=Block
         - BestEffort => congestion_control=Drop
         - TransientLocal => express=True
         - Volatile => express=False
 
-        Zenoh Python APIs differ across versions; we attempt common kwargs and
-        fall back to passing them at put-time (or not at all).
+        Strict mode raises if the installed Zenoh Python API cannot accept the
+        mapping. Compatibility mode falls back to declaration without these
+        options and tries passing supported options at publish time.
         """
         # Resolve Zenoh congestion control enum if available.
-        cc = None
-        try:
-            import zenoh
-            qos_mod = getattr(zenoh, "qos", None)
-            cc_enum = getattr(qos_mod, "CongestionControl", None) if qos_mod is not None else None
-            if cc_enum is not None:
-                if self.qos_profile.reliability == QosReliability.RELIABLE:
-                    cc = getattr(cc_enum, "Block", None) or getattr(cc_enum, "BLOCK", None)
-                else:
-                    cc = getattr(cc_enum, "Drop", None) or getattr(cc_enum, "DROP", None)
-        except Exception:
-            cc = None
+        import zenoh
+
+        cc = self._resolve_congestion_control(
+            zenoh,
+            reliability=self.qos_profile.reliability,
+            strict=self.strict_zenoh_qos,
+        )
 
         express = self.qos_profile.durability == QosDurability.TRANSIENT_LOCAL
 
@@ -223,18 +212,48 @@ class ROS2Publisher:
                 "Your Zenoh Python API does not support setting publisher QoS options "
                 "(congestion_control/express) at declare-time. "
                 "QoS token encoding will still be correct, but runtime QoS->Zenoh mapping may not be applied. "
-                "Upgrade zenoh-python or set strict_zenoh_qos=False to continue with best-effort behavior."
+                "Upgrade zenoh-python or set strict_zenoh_qos=False to allow compatibility mode."
             )
             if self.strict_zenoh_qos:
                 raise RuntimeError(msg)
             logger.warning(msg)
 
-            # Best-effort: fall back to plain publisher and attempt passing options at put-time.
+            # Compatibility mode: declare plain publisher and pass supported options at put-time.
             pub = self.session_mgr.session.declare_publisher(keyexpr)
             if cc is not None:
                 self._put_extra_kwargs["congestion_control"] = cc
             self._put_extra_kwargs["express"] = express
             return pub
+
+    @staticmethod
+    def _resolve_congestion_control(zenoh_module, *, reliability: QosReliability, strict: bool):
+        """Resolve the Zenoh congestion-control enum for the requested reliability."""
+        cc_enum = getattr(zenoh_module, "CongestionControl", None)
+        if cc_enum is None:
+            qos_mod = getattr(zenoh_module, "qos", None)
+            cc_enum = getattr(qos_mod, "CongestionControl", None) if qos_mod is not None else None
+
+        if cc_enum is None:
+            if strict:
+                raise RuntimeError(
+                    "Your Zenoh Python API does not expose CongestionControl, "
+                    "so publisher reliability cannot be mapped to Zenoh runtime QoS. "
+                    "Upgrade zenoh-python or set strict_zenoh_qos=False to allow compatibility mode."
+                )
+            return None
+
+        if reliability == QosReliability.RELIABLE:
+            cc = getattr(cc_enum, "Block", None) or getattr(cc_enum, "BLOCK", None)
+        else:
+            cc = getattr(cc_enum, "Drop", None) or getattr(cc_enum, "DROP", None)
+
+        if cc is None and strict:
+            raise RuntimeError(
+                "Your Zenoh Python API exposes CongestionControl but not the required "
+                f"{reliability.name} mapping. Upgrade zenoh-python or set "
+                "strict_zenoh_qos=False to allow compatibility mode."
+            )
+        return cc
 
     def _create_attachment(self, seq_num: int, timestamp_ns: int) -> bytes:
         """Create rmw_zenoh attachment"""
@@ -264,7 +283,8 @@ class ROS2Publisher:
         timestamp_ns = int(time.time() * 1e9)
         attachment = self._create_attachment(self.sequence_number, timestamp_ns)
 
-        # Publish (best-effort QoS passthrough for Zenoh implementations that accept it)
+        # Publish with compatibility-mode QoS passthrough when declaration-time
+        # options were not accepted by the installed Zenoh Python API.
         try:
             self.pub.put(
                 cdr_bytes,

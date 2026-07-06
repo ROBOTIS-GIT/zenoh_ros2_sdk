@@ -25,7 +25,7 @@ logger = get_logger("service_server")
 @slotted_dataclass(frozen=True)
 class ServiceRequestKey:
     """
-    Correlation key for service requests, aligned with ros-z QueryKey and rmw_zenoh.
+    Correlation key for service requests, aligned with rmw_zenoh.
     """
 
     sequence_id: int
@@ -95,7 +95,11 @@ class ROS2ServiceServer:
         self.domain_id = resolve_domain_id(domain_id)
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_service_server_{uuid.uuid4().hex[:8]}"
-        _, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
+        _, self.qos = self._normalize_qos(
+            qos,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
 
         # Get or create shared session
         self.session_mgr = ZenohSession.get_instance(router_ip, router_port)
@@ -172,7 +176,7 @@ class ROS2ServiceServer:
                                     f"Service definition file for {srv_type} has empty response definition"
                                 )
                 except Exception as e:
-                    # Re-raise with more context - don't silently swallow errors
+                    # Re-raise with service context.
                     raise RuntimeError(
                         f"Failed to load service definitions from registry for {srv_type}: {e}"
                     ) from e
@@ -184,7 +188,6 @@ class ROS2ServiceServer:
                 )
 
             # Get dependencies recursively
-            dependencies = None
             try:
                 registry = get_registry()
                 # Load dependencies for both request and response using shared utility function
@@ -192,7 +195,9 @@ class ROS2ServiceServer:
                 resp_deps = load_dependencies_recursive(self.response_type, hash_response_def, registry)
                 dependencies = {**req_deps, **resp_deps}
             except Exception as e:
-                logger.debug(f"Could not load dependencies for {srv_type}: {e}")
+                raise RuntimeError(
+                    f"Failed to load complete dependency tree for {srv_type}: {e}"
+                ) from e
 
             # For services, compute hash from the service type itself (not just request)
             # Services are represented as a type with request_message, response_message, and event_message fields
@@ -232,7 +237,7 @@ class ROS2ServiceServer:
         )
         logger.info(f"Queryable declared successfully on: {self.keyexpr}")
 
-        # Queue-mode state (ros-z style)
+        # Queue-mode state using rmw_zenoh-style request correlation.
         self._lock = threading.Lock()
         self._cv = threading.Condition(self._lock)
         self._queue: deque[Tuple[ServiceRequestKey, object]] = deque()
@@ -245,15 +250,15 @@ class ROS2ServiceServer:
         qos: Optional[object],
         *,
         default: QosProfile,
-        fallback: str,
+        default_encoded: str,
     ) -> tuple[QosProfile, str]:
         if qos is None:
-            return default, fallback
+            return default, default_encoded
         if isinstance(qos, QosProfile):
             return qos, qos.encode()
         if isinstance(qos, str):
             return QosProfile.decode(qos), qos
-        return default, fallback
+        return default, default_encoded
 
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""
@@ -285,7 +290,7 @@ class ROS2ServiceServer:
 
     def take_request(self, timeout: Optional[float] = None) -> Tuple[ServiceRequestKey, object]:
         """
-        Queue-mode API (ros-z style): block until a request is available, then return (key, request_msg).
+        Queue-mode API: block until a request is available, then return (key, request_msg).
         """
         if self.mode != "queue":
             raise RuntimeError("take_request() is only available when mode='queue'")
@@ -305,7 +310,7 @@ class ROS2ServiceServer:
 
     def send_response(self, key: ServiceRequestKey, response_msg: object) -> None:
         """
-        Queue-mode API (ros-z style): reply to a previously taken request using its correlation key.
+        Queue-mode API: reply to a previously taken request using its correlation key.
         """
         if self.mode != "queue":
             raise RuntimeError("send_response() is only available when mode='queue'")
@@ -347,7 +352,7 @@ class ROS2ServiceServer:
                 return
 
             # Get attachment from query (required for response)
-            # Following ros-z and rmw_zenoh pattern: response attachment includes
+            # Following the rmw_zenoh pattern: response attachment includes
             # sequence number and GID from request, plus new timestamp
             # According to rmw_zenoh design, attachment is REQUIRED for service requests
             attachment = getattr(query, "attachment", None)
@@ -372,7 +377,7 @@ class ROS2ServiceServer:
             request_msg = self.session_mgr.store.deserialize_cdr(cdr_bytes, self.request_store_type)
 
             if self.mode == "queue":
-                # Store query for later response (ros-z style).
+                # Store query for later response using the request correlation key.
                 with self._cv:
                     if key in self._pending_queries:
                         query.reply_err(zenoh.ZBytes(b"Duplicate service request key"))

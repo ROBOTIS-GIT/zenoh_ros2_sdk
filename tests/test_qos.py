@@ -16,7 +16,7 @@ from zenoh_ros2_sdk.qos import (
 
 
 def test_qos_default_encodes_to_expected_string():
-    # Default should match rmw_zenoh / ros-z convention.
+    # Default should match rmw_zenoh convention.
     assert QosProfile().encode() == "::,10:,:,:,,"  # KeepLast(10), reliable, volatile, infinite, automatic
 
 
@@ -43,4 +43,3 @@ def test_qos_decode_incomplete_raises():
 
 def test_qos_infinite_constant_is_duration():
     assert isinstance(DURATION_INFINITE, Duration)
-

@@ -1,10 +1,19 @@
 """
 Unit tests for ROS2ActionClient
 """
+
+from concurrent.futures import Future
+from types import SimpleNamespace
+import threading
+
 import pytest
 from zenoh_ros2_sdk import ROS2ActionClient
-from zenoh_ros2_sdk.session import ZenohSession
 import zenoh_ros2_sdk.message_registry as _msg_registry_module
+from zenoh_ros2_sdk.qos import (
+    DEFAULT_QOS_PROFILE,
+    DEFAULT_ACTION_FEEDBACK_QOS_PROFILE,
+    DEFAULT_ACTION_STATUS_QOS_PROFILE,
+)
 
 _ACTION_TYPE = "example_interfaces/action/Fibonacci"
 _ACTION_NAME = "/fibonacci"
@@ -264,6 +273,41 @@ class TestROS2ActionClient:
 
         client.close()
 
+    def test_action_client_ros2_action_qos_defaults(self):
+        """Test that action endpoint QoS defaults match rclpy/rcl_action."""
+        client = ROS2ActionClient(
+            action_name=_ACTION_NAME,
+            action_type=_ACTION_TYPE,
+            domain_id=0,
+        )
+
+        assert client.goal_service_qos == DEFAULT_QOS_PROFILE.encode()
+        assert client.result_service_qos == DEFAULT_QOS_PROFILE.encode()
+        assert client.cancel_service_qos == DEFAULT_QOS_PROFILE.encode()
+        assert client.feedback_sub_qos == DEFAULT_ACTION_FEEDBACK_QOS_PROFILE.encode()
+        assert client.status_sub_qos == DEFAULT_ACTION_STATUS_QOS_PROFILE.encode()
+
+        client.close()
+
+    def test_cancel_goal_request_serializes(self):
+        """CancelGoal uses action_msgs/msg/GoalInfo, not a service-local fallback type."""
+        client = ROS2ActionClient(
+            action_name=_ACTION_NAME,
+            action_type=_ACTION_TYPE,
+            domain_id=0,
+        )
+
+        uuid_msg = client._make_uuid_msg(bytes(range(16)))
+        stamp = client._time_class(sec=0, nanosec=0)
+        goal_info = client._goal_info_class(goal_id=uuid_msg, stamp=stamp)
+        request = client._cancel_goal_req_class(goal_info=goal_info)
+
+        payload = client._serialize(request, client._cancel_goal_req_store)
+
+        assert payload
+
+        client.close()
+
     def test_action_client_shared_session(self):
         """Test that multiple action clients share the same Zenoh session"""
         client1 = ROS2ActionClient(
@@ -281,6 +325,172 @@ class TestROS2ActionClient:
 
         client1.close()
         client2.close()
+
+    def test_send_goal_returns_final_result(self):
+        """Synchronous send_goal follows rclpy and returns the final result response."""
+        client = object.__new__(ROS2ActionClient)
+        result = object()
+
+        class _Handle:
+            accepted = True
+
+            def get_result(self, timeout=None):
+                assert timeout == 12.0
+                return result
+
+        future = Future()
+        future.set_result(_Handle())
+        calls = {}
+
+        def _send_goal_async(goal=None, **kwargs):
+            calls["goal"] = goal
+            calls["kwargs"] = kwargs
+            return future
+
+        client.send_goal_async = _send_goal_async
+
+        assert client.send_goal(order=10, result_timeout=12.0) is result
+        assert calls["goal"] is None
+        assert calls["kwargs"]["order"] == 10
+        assert calls["kwargs"]["feedback_callback"] is None
+        assert "timeout" in calls["kwargs"]
+
+    def test_send_goal_returns_none_for_rejected_goal(self):
+        """Synchronous send_goal does not request a result for rejected goals."""
+        client = object.__new__(ROS2ActionClient)
+
+        class _Handle:
+            accepted = False
+
+            def get_result(self, timeout=None):
+                raise AssertionError("get_result should not be called")
+
+        future = Future()
+        future.set_result(_Handle())
+        client.send_goal_async = lambda *args, **kwargs: future
+
+        assert client.send_goal(order=10) is None
+
+    def test_run_query_async_times_out_without_reply(self):
+        """Async Zenoh queries complete even when Zenoh never calls the reply callback."""
+        client = object.__new__(ROS2ActionClient)
+        client._pending_futures = set()
+        client._pending_lock = threading.Lock()
+        client._closed = False
+        client._sequence_numbers = {"send_goal": 1}
+        client._seq_lock = threading.Lock()
+
+        class _Querier:
+            def get(self, *args, **kwargs):
+                return None
+
+        future = client._run_query_async(
+            _Querier(),
+            b"payload",
+            b"gid",
+            "send_goal",
+            "response_type",
+            timeout=0.01,
+        )
+
+        assert future.result(timeout=1.0) is None
+
+    def test_run_query_async_completes_on_zenoh_error(self):
+        """Async Zenoh query send errors complete the Future with None."""
+        client = object.__new__(ROS2ActionClient)
+        client._pending_futures = set()
+        client._pending_lock = threading.Lock()
+        client._closed = False
+        client._sequence_numbers = {"send_goal": 1}
+        client._seq_lock = threading.Lock()
+
+        class _Querier:
+            def get(self, *args, **kwargs):
+                raise RuntimeError("boom")
+
+        future = client._run_query_async(
+            _Querier(),
+            b"payload",
+            b"gid",
+            "send_goal",
+            "response_type",
+            timeout=1.0,
+        )
+
+        assert future.result(timeout=1.0) is None
+
+    def test_feedback_router_passes_full_feedback_message(self):
+        """Feedback callbacks receive FeedbackMessage, matching rclpy."""
+        client = object.__new__(ROS2ActionClient)
+        goal_id = bytes(range(16))
+        received = []
+        client._feedback_callbacks = {goal_id: received.append}
+        client._feedback_lock = threading.Lock()
+        client._feedback_msg_store = "feedback"
+        feedback_msg = SimpleNamespace(
+            goal_id=SimpleNamespace(uuid=goal_id),
+            feedback=SimpleNamespace(sequence=[1, 1, 2]),
+        )
+        client._deserialize = lambda cdr, store: feedback_msg
+
+        class _Payload:
+            def to_bytes(self):
+                return b"cdr"
+
+        client._feedback_router(SimpleNamespace(payload=_Payload()))
+
+        assert received == [feedback_msg]
+
+    def test_status_listener_updates_and_removes_terminal_goal(self):
+        """Terminal status updates clean active handles and feedback callbacks."""
+        client = object.__new__(ROS2ActionClient)
+        goal_id = bytes(range(16))
+        handle = ROS2ActionClient.GoalHandle(goal_id, accepted=True, client=client)
+        client._goal_handles = {goal_id: handle}
+        client._goal_lock = threading.Lock()
+        client._feedback_callbacks = {goal_id: lambda msg: None}
+        client._feedback_lock = threading.Lock()
+        client._status_msg_store = "status"
+        status_msg = SimpleNamespace(
+            status_list=[
+                SimpleNamespace(
+                    goal_info=SimpleNamespace(
+                        goal_id=SimpleNamespace(uuid=goal_id),
+                    ),
+                    status=4,
+                )
+            ]
+        )
+        client._deserialize = lambda cdr, store: status_msg
+
+        class _Payload:
+            def to_bytes(self):
+                return b"cdr"
+
+        client._status_listener(SimpleNamespace(payload=_Payload()))
+
+        assert handle.status == 4
+        assert goal_id not in client._goal_handles
+        assert goal_id not in client._feedback_callbacks
+
+    def test_close_completes_pending_query_futures(self):
+        """Closing the client completes pending action futures so callers do not hang."""
+        client = object.__new__(ROS2ActionClient)
+        future = Future()
+        client._close_lock = threading.Lock()
+        client._closed = False
+        client._pending_futures = {future}
+        client._pending_lock = threading.Lock()
+        client._feedback_callbacks = {b"goal": lambda msg: None}
+        client._feedback_lock = threading.Lock()
+        client._goal_handles = {}
+        client._goal_lock = threading.Lock()
+
+        client.close()
+
+        assert future.done()
+        assert future.result() is None
+        assert client._feedback_callbacks == {}
 
     def test_action_client_close_idempotent(self):
         """Test that close() can be called multiple times without error"""

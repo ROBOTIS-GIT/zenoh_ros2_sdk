@@ -2,12 +2,14 @@
 ROS2ActionClient - ROS2 Action Client using Zenoh
 """
 
+from __future__ import annotations
+
+from concurrent.futures import Future
 import zenoh
 from zenoh import Encoding
 import time
 import uuid
 import threading
-import numpy as np
 from typing import Callable, Dict, Optional
 
 from .session import ZenohSession
@@ -21,12 +23,21 @@ from .utils import (
 )
 from .entity import EntityKind, NodeEntity, EndpointEntity
 from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
-from .qos import QosProfile, DEFAULT_QOS_PROFILE
+from .qos import (
+    QosProfile,
+    DEFAULT_QOS_PROFILE,
+    DEFAULT_ACTION_FEEDBACK_QOS_PROFILE,
+    DEFAULT_ACTION_STATUS_QOS_PROFILE,
+)
 from .attachment import Attachment
 from .message_registry import get_registry
+from .discovery import _query_liveliness
 from .logger import get_logger
 
 logger = get_logger("action_client")
+
+_USE_CLIENT_TIMEOUT = object()
+_TERMINAL_GOAL_STATUSES = {4, 5, 6}
 
 
 class ROS2ActionClient:
@@ -44,13 +55,14 @@ class ROS2ActionClient:
     """
 
     class GoalHandle:
-        """Handle for a submitted action goal returned by send_goal."""
+        """Handle for a submitted action goal returned by send_goal_async."""
 
         def __init__(
             self,
             goal_id: bytes,
             accepted: bool,
             client: "ROS2ActionClient",
+            stamp: Optional[object] = None,
         ):
             """Store the goal UUID and a back-reference to the owning client.
 
@@ -58,10 +70,19 @@ class ROS2ActionClient:
                 goal_id: 16-byte UUID identifying this goal.
                 accepted: Whether the action server accepted the goal.
                 client: Owning ROS2ActionClient used to issue follow-up queries.
+                stamp: Server timestamp from the SendGoal response.
             """
-            self.goal_id = goal_id
-            self.accepted = accepted
+            self.goal_id = bytes(goal_id)
+            self.accepted = bool(accepted)
+            self.stamp = stamp
+            self.status = 0
             self._client = client
+
+        def __repr__(self) -> str:
+            return (
+                f"GoalHandle(goal_id={self.goal_id.hex()}, "
+                f"accepted={self.accepted}, status={self.status})"
+            )
 
         def get_result(self, timeout: Optional[float] = None) -> Optional[object]:
             """Block until the action server sends the result.
@@ -74,13 +95,30 @@ class ROS2ActionClient:
             """
             return self._client._call_get_result(self.goal_id, timeout=timeout)
 
-        def cancel(self) -> Optional[object]:
+        def get_result_async(self, timeout: Optional[float] = None) -> Future:
+            """Request the result asynchronously.
+
+            Args:
+                timeout: Maximum wait in seconds. None waits indefinitely.
+
+            Returns:
+                Future resolving to GetResult_Response, or None on timeout/error.
+            """
+            return self._client._call_get_result_async(self.goal_id, timeout=timeout)
+
+        def cancel_goal(
+            self, timeout: object = _USE_CLIENT_TIMEOUT
+        ) -> Optional[object]:
             """Request cancellation of this goal.
 
             Returns:
                 CancelGoal_Response object, or None on timeout or error.
             """
-            return self._client._call_cancel_goal(self.goal_id)
+            return self._client._call_cancel_goal(self.goal_id, timeout=timeout)
+
+        def cancel_goal_async(self, timeout: object = _USE_CLIENT_TIMEOUT) -> Future:
+            """Request cancellation asynchronously."""
+            return self._client._call_cancel_goal_async(self.goal_id, timeout=timeout)
 
     def __init__(
         self,
@@ -92,7 +130,11 @@ class ROS2ActionClient:
         router_ip: str = "127.0.0.1",
         router_port: int = 7447,
         timeout: float = 10.0,
-        qos: Optional[object] = None,
+        goal_service_qos_profile: Optional[object] = None,
+        result_service_qos_profile: Optional[object] = None,
+        cancel_service_qos_profile: Optional[object] = None,
+        feedback_sub_qos_profile: Optional[object] = None,
+        status_sub_qos_profile: Optional[object] = None,
     ):
         """Create a ROS2 action client.
 
@@ -113,8 +155,15 @@ class ROS2ActionClient:
             timeout: Timeout in seconds for send_goal and cancel_goal queries.
                 get_result uses a 24-hour Zenoh-level timeout; callers control
                 their own wait via ``GoalHandle.get_result(timeout=…)``.
-            qos: QoS for liveliness discovery tokens. Accepts ``QosProfile``,
-                an encoded rmw_zenoh QoS string, or None for the default profile.
+            goal_service_qos_profile: QoS for the send_goal service client.
+            result_service_qos_profile: QoS for the get_result service client.
+            cancel_service_qos_profile: QoS for the cancel_goal service client.
+            feedback_sub_qos_profile: QoS for the feedback subscription. Defaults
+                to reliable, volatile, keep-last depth 10 like rclpy/rcl_action.
+            status_sub_qos_profile: QoS for the status subscription. Defaults to
+                reliable, transient-local, keep-last depth 1 like rcl_action.
+            QoS arguments accept ``QosProfile``, an encoded rmw_zenoh QoS string,
+                or None for the ROS 2 default profile for that endpoint.
 
         Raises:
             ValueError: If ``action_type`` is not in ``pkg/action/Name`` format.
@@ -125,9 +174,7 @@ class ROS2ActionClient:
                 action_name="/fibonacci",
                 action_type="example_interfaces/action/Fibonacci",
             )
-            goal = client.send_goal(order=10)
-            if goal:
-                result = goal.get_result(timeout=30.0)
+            result = client.send_goal(order=10, result_timeout=30.0)
             client.close()
         """
         self.action_name = action_name
@@ -136,8 +183,30 @@ class ROS2ActionClient:
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_action_client_{uuid.uuid4().hex[:8]}"
         self.timeout = timeout
-        _, self.qos = self._normalize_qos(
-            qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode()
+        _, self.goal_service_qos = self._normalize_qos(
+            goal_service_qos_profile,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
+        _, self.result_service_qos = self._normalize_qos(
+            result_service_qos_profile,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
+        _, self.cancel_service_qos = self._normalize_qos(
+            cancel_service_qos_profile,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
+        _, self.feedback_sub_qos = self._normalize_qos(
+            feedback_sub_qos_profile,
+            default=DEFAULT_ACTION_FEEDBACK_QOS_PROFILE,
+            default_encoded=DEFAULT_ACTION_FEEDBACK_QOS_PROFILE.encode(),
+        )
+        _, self.status_sub_qos = self._normalize_qos(
+            status_sub_qos_profile,
+            default=DEFAULT_ACTION_STATUS_QOS_PROFILE,
+            default_encoded=DEFAULT_ACTION_STATUS_QOS_PROFILE.encode(),
         )
 
         parts = action_type.split("/")
@@ -151,10 +220,8 @@ class ROS2ActionClient:
 
         # Load all action sub-types via the message registry
         registry = get_registry()
-        try:
-            registry.load_action_type(action_type)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load action type {action_type}: {e}") from e
+        if not registry.load_action_type(action_type):
+            raise RuntimeError(f"Failed to load action type {action_type}")
 
         # Synthesized type names
         self._send_goal_req_type = f"{action_type}_SendGoal_Request"
@@ -248,13 +315,21 @@ class ROS2ActionClient:
         self._feedback_dds = ros2_to_dds_type(f"{action_type}_FeedbackMessage")
         self._status_dds = ros2_to_dds_type("action_msgs/msg/GoalStatusArray")
 
-        # Feedback routing: goal_id (bytes) → callback
+        # Feedback routing: goal_id (bytes) -> callback
         self._feedback_callbacks: Dict[bytes, Callable] = {}
         self._feedback_lock = threading.Lock()
+        self._goal_handles: Dict[bytes, ROS2ActionClient.GoalHandle] = {}
+        self._goal_lock = threading.Lock()
 
         # Sequence numbers and state
-        self._sequence_number = 1
+        self._sequence_numbers = {
+            "send_goal": 1,
+            "get_result": 1,
+            "cancel_goal": 1,
+        }
         self._seq_lock = threading.Lock()
+        self._pending_futures: set[Future] = set()
+        self._pending_lock = threading.Lock()
         self._closed = False
         self._close_lock = threading.Lock()
 
@@ -347,16 +422,16 @@ class ROS2ActionClient:
         qos: Optional[object],
         *,
         default: QosProfile,
-        fallback: str,
+        default_encoded: str,
     ) -> tuple[QosProfile, str]:
         """Normalize a qos argument to a (QosProfile, encoded_string) pair."""
         if qos is None:
-            return default, fallback
+            return default, default_encoded
         if isinstance(qos, QosProfile):
             return qos, qos.encode()
         if isinstance(qos, str):
             return QosProfile.decode(qos), qos
-        return default, fallback
+        return default, default_encoded
 
     def _compute_type_hashes(self, action_type: str, registry) -> dict:
         """Compute ROS2 type hashes for all 5 action endpoints."""
@@ -456,7 +531,7 @@ class ROS2ActionClient:
             node_liveliness_keyexpr(node)
         )
 
-        def _sc(entity_id, name, dds_type, type_hash, gid):
+        def _sc(entity_id, name, dds_type, type_hash, gid, qos):
             ep = EndpointEntity(
                 node=node,
                 entity_id=entity_id,
@@ -464,14 +539,14 @@ class ROS2ActionClient:
                 name=name,
                 dds_type_name=dds_type,
                 type_hash=type_hash,
-                qos=self.qos,
+                qos=qos,
                 gid=gid,
             )
             return self.session_mgr.liveliness.declare_token(
                 endpoint_liveliness_keyexpr(ep)
             )
 
-        def _ms(entity_id, name, dds_type, type_hash, gid):
+        def _ms(entity_id, name, dds_type, type_hash, gid, qos):
             ep = EndpointEntity(
                 node=node,
                 entity_id=entity_id,
@@ -479,7 +554,7 @@ class ROS2ActionClient:
                 name=name,
                 dds_type_name=dds_type,
                 type_hash=type_hash,
-                qos=self.qos,
+                qos=qos,
                 gid=gid,
             )
             return self.session_mgr.liveliness.declare_token(
@@ -492,6 +567,7 @@ class ROS2ActionClient:
             self._send_goal_dds,
             self._send_goal_hash,
             self._send_goal_gid,
+            self.goal_service_qos,
         )
         self._get_result_token = _sc(
             self._get_result_entity_id,
@@ -499,6 +575,7 @@ class ROS2ActionClient:
             self._get_result_dds,
             self._get_result_hash,
             self._get_result_gid,
+            self.result_service_qos,
         )
         self._cancel_goal_token = _sc(
             self._cancel_goal_entity_id,
@@ -506,6 +583,7 @@ class ROS2ActionClient:
             self._cancel_goal_dds,
             self._cancel_goal_hash,
             self._cancel_goal_gid,
+            self.cancel_service_qos,
         )
         self._feedback_token = _ms(
             self._feedback_entity_id,
@@ -513,6 +591,7 @@ class ROS2ActionClient:
             self._feedback_dds,
             self._feedback_hash,
             self._feedback_gid,
+            self.feedback_sub_qos,
         )
         self._status_token = _ms(
             self._status_entity_id,
@@ -520,18 +599,49 @@ class ROS2ActionClient:
             self._status_dds,
             self._status_hash,
             self._status_gid,
+            self.status_sub_qos,
         )
 
-    def _next_seq(self) -> int:
-        """Return and increment the monotonic per-client CDR sequence number."""
+    def _next_seq(self, endpoint: str) -> int:
+        """Return and increment the monotonic sequence number for one service endpoint."""
         with self._seq_lock:
-            seq = self._sequence_number
-            self._sequence_number += 1
+            seq = self._sequence_numbers[endpoint]
+            self._sequence_numbers[endpoint] = seq + 1
         return seq
 
     def _make_uuid_msg(self, goal_id_bytes: bytes):
         """Wrap 16 raw bytes into a UUID message object."""
+        try:
+            import numpy as np
+        except ModuleNotFoundError as e:
+            raise RuntimeError(
+                "NumPy is required to serialize ROS 2 UUID array fields. "
+                "Install zenoh-ros2-sdk with its package dependencies."
+            ) from e
+        goal_id_bytes = self._normalize_goal_id_bytes(goal_id_bytes)
         return self._uuid_class(uuid=np.frombuffer(goal_id_bytes, dtype=np.uint8))
+
+    def _normalize_goal_id_bytes(self, goal_id: object) -> bytes:
+        """Normalize supported goal UUID inputs to exactly 16 bytes."""
+        if isinstance(goal_id, uuid.UUID):
+            goal_id_bytes = goal_id.bytes
+        elif isinstance(goal_id, (bytes, bytearray)):
+            goal_id_bytes = bytes(goal_id)
+        elif hasattr(goal_id, "uuid"):
+            key = self._goal_id_to_key(goal_id)
+            if key is None:
+                raise ValueError("goal_uuid message does not contain a uuid field")
+            goal_id_bytes = key
+        else:
+            try:
+                goal_id_bytes = bytes(goal_id)  # type: ignore[arg-type]
+            except TypeError as e:
+                raise TypeError(
+                    "goal_uuid must be uuid.UUID, a UUID message, or 16 raw bytes"
+                ) from e
+        if len(goal_id_bytes) != 16:
+            raise ValueError(f"goal_uuid must be 16 bytes, got {len(goal_id_bytes)}")
+        return goal_id_bytes
 
     def _goal_id_to_key(self, uuid_msg) -> Optional[bytes]:
         """Extract a hashable bytes key from a UUID message field."""
@@ -543,6 +653,26 @@ class ROS2ActionClient:
         if hasattr(raw, "tobytes"):
             return raw.tobytes()
         return bytes(raw)
+
+    def _resolve_timeout(self, timeout: object) -> Optional[float]:
+        """Use the client request timeout unless the caller explicitly supplied one."""
+        if timeout is _USE_CLIENT_TIMEOUT:
+            return self.timeout
+        return timeout  # type: ignore[return-value]
+
+    def _register_goal_handle(self, handle: "ROS2ActionClient.GoalHandle") -> None:
+        if not handle.accepted:
+            return
+        with self._goal_lock:
+            self._goal_handles[handle.goal_id] = handle
+
+    def _remove_goal_handle(self, goal_id: bytes) -> None:
+        with self._goal_lock:
+            self._goal_handles.pop(bytes(goal_id), None)
+
+    def _remove_feedback_callback(self, goal_id: bytes) -> None:
+        with self._feedback_lock:
+            self._feedback_callbacks.pop(bytes(goal_id), None)
 
     def _serialize(self, msg, store_type: str) -> bytes:
         """Serialize a rosbags message to CDR bytes via the shared type store."""
@@ -573,202 +703,257 @@ class ROS2ActionClient:
         querier,
         payload_bytes: bytes,
         gid: bytes,
+        endpoint: str,
         resp_store_type: str,
         timeout: Optional[float],
     ) -> Optional[object]:
         """Send a Zenoh query and block until a response arrives or the timeout elapses."""
-        if querier is None:
-            logger.error("Cannot run query: querier is None (client may be closed)")
-            return None
-
-        attachment = Attachment(
-            sequence_id=self._next_seq(),
-            timestamp_ns=int(time.time() * 1e9),
-            gid=gid,
-        ).to_bytes()
-
-        event = threading.Event()
-        result: dict = {"response": None}
-        called = False
-        lock = threading.Lock()
-
-        def _on_reply(reply: zenoh.Reply):
-            nonlocal called
-            with lock:
-                if called:
-                    return
-                called = True
-            try:
-                cdr = self._extract_reply_payload(reply)
-                if cdr is not None:
-                    result["response"] = self._deserialize(cdr, resp_store_type)
-            except Exception as e:
-                logger.error(f"Error processing action reply: {e}", exc_info=True)
-            finally:
-                event.set()
-
-        querier.get(
-            _on_reply,
-            parameters="",
-            payload=zenoh.ZBytes(payload_bytes),
-            encoding=Encoding("application/cdr"),
-            attachment=zenoh.ZBytes(attachment),
+        future = self._run_query_async(
+            querier,
+            payload_bytes,
+            gid,
+            endpoint,
+            resp_store_type,
+            timeout=timeout,
         )
-
-        wait_secs = timeout if timeout is not None else self.timeout
-        if event.wait(timeout=wait_secs):
-            return result["response"]
-        logger.warning(f"Action query timed out after {wait_secs}s")
-        return None
+        return future.result()
 
     def _run_query_async(
         self,
         querier,
         payload_bytes: bytes,
         gid: bytes,
+        endpoint: str,
         resp_store_type: str,
-        callback: Callable,
-    ) -> None:
-        """Send a Zenoh query and invoke a callback when the reply arrives."""
+        timeout: Optional[float],
+    ) -> Future:
+        """Send a Zenoh query and return a Future completed by reply, timeout, or close."""
+        future: Future = Future()
+        lock = threading.Lock()
+        timer_ref: dict[str, Optional[threading.Timer]] = {"timer": None}
+
+        def _complete(value: Optional[object]) -> None:
+            with lock:
+                if future.done():
+                    return
+                timer = timer_ref.get("timer")
+                if timer is not None:
+                    timer.cancel()
+                future.set_result(value)
+
         if querier is None:
             logger.error("Cannot run query: querier is None (client may be closed)")
-            callback(None)
-            return
+            future.set_result(None)
+            return future
+
+        with self._pending_lock:
+            if self._closed:
+                future.set_result(None)
+                return future
+            self._pending_futures.add(future)
+
+        def _remove_pending(done: Future) -> None:
+            with self._pending_lock:
+                self._pending_futures.discard(done)
+
+        future.add_done_callback(_remove_pending)
 
         attachment = Attachment(
-            sequence_id=self._next_seq(),
+            sequence_id=self._next_seq(endpoint),
             timestamp_ns=int(time.time() * 1e9),
             gid=gid,
         ).to_bytes()
 
-        called = False
-        lock = threading.Lock()
-
         def _on_reply(reply: zenoh.Reply):
-            nonlocal called
-            with lock:
-                if called:
-                    return
-                called = True
             try:
                 cdr = self._extract_reply_payload(reply)
-                callback(
+                response = (
                     self._deserialize(cdr, resp_store_type) if cdr is not None else None
                 )
             except Exception as e:
                 logger.error(f"Error processing async action reply: {e}", exc_info=True)
-                callback(None)
+                response = None
+            _complete(response)
 
-        querier.get(
-            _on_reply,
-            parameters="",
-            payload=zenoh.ZBytes(payload_bytes),
-            encoding=Encoding("application/cdr"),
-            attachment=zenoh.ZBytes(attachment),
-        )
+        try:
+            querier.get(
+                _on_reply,
+                parameters="",
+                payload=zenoh.ZBytes(payload_bytes),
+                encoding=Encoding("application/cdr"),
+                attachment=zenoh.ZBytes(attachment),
+            )
+        except Exception as e:
+            logger.error(f"Error sending action query: {e}", exc_info=True)
+            _complete(None)
+
+        if timeout is not None and not future.done():
+
+            def _on_timeout() -> None:
+                logger.warning(f"Action query timed out after {timeout}s")
+                _complete(None)
+
+            timer = threading.Timer(float(timeout), _on_timeout)
+            timer.daemon = True
+            with lock:
+                if not future.done():
+                    timer_ref["timer"] = timer
+                    timer.start()
+
+        return future
 
     def send_goal(
         self,
+        goal: Optional[object] = None,
+        *,
         feedback_callback: Optional[Callable] = None,
-        **kwargs,
-    ) -> Optional["ROS2ActionClient.GoalHandle"]:
-        """Send a goal to the action server synchronously.
+        goal_uuid: Optional[object] = None,
+        goal_response_timeout: object = _USE_CLIENT_TIMEOUT,
+        result_timeout: Optional[float] = None,
+        **goal_fields,
+    ) -> Optional[object]:
+        """Send a goal and wait for the final action result.
 
-        Blocks until the server accepts or rejects the goal, or the client
-        timeout elapses. If ``feedback_callback`` is provided it is registered
-        before the query is sent so no feedback messages are missed.
+        This mirrors ``rclpy.action.ActionClient.send_goal``: the synchronous
+        helper returns the final GetResult_Response, not a goal handle. Use
+        ``send_goal_async`` when the caller needs the accepted goal handle for
+        cancellation or separate result polling.
 
         Args:
+            goal: Optional prebuilt rosbags Goal message. If omitted, ``goal_fields``
+                are forwarded to the Goal message constructor.
             feedback_callback: Optional callable invoked as
-                ``feedback_callback(feedback_msg)`` for each feedback message
-                published for this goal. Called from a Zenoh background thread.
-            **kwargs: Goal field values forwarded to the Goal message constructor.
+                ``feedback_callback(feedback_message)`` with the full
+                FeedbackMessage object for this goal.
+            goal_uuid: Optional deterministic goal UUID as uuid.UUID, UUID message,
+                or 16 raw bytes.
+            goal_response_timeout: Maximum wait for the send_goal service response.
+                The default uses the client request timeout. Pass None to wait
+                indefinitely.
+            result_timeout: Maximum wait for the get_result response. None waits
+                indefinitely.
+            **goal_fields: Goal field values forwarded to the Goal message constructor.
 
         Returns:
-            GoalHandle if the server accepted the goal, or None if the goal was
-            rejected or the request timed out.
+            GetResult_Response object, or None when the goal is rejected, times
+            out, or errors.
 
         Examples:
-            goal = client.send_goal(
-                feedback_callback=lambda msg: print(msg),
+            result = client.send_goal(
+                feedback_callback=lambda msg: print(msg.feedback),
                 order=10,
+                result_timeout=30.0,
             )
-            if goal:
-                result = goal.get_result(timeout=30.0)
         """
-        goal_id = uuid.uuid4().bytes
-        goal_id_key = bytes(goal_id)
-
-        if feedback_callback is not None:
-            with self._feedback_lock:
-                self._feedback_callbacks[goal_id_key] = feedback_callback
-
-        request = self._build_send_goal_request(goal_id, kwargs)
-        payload = self._serialize(request, self._send_goal_req_store)
-        response = self._run_query(
-            self._send_goal_querier,
-            payload,
-            self._send_goal_gid,
-            self._send_goal_resp_store,
-            timeout=self.timeout,
+        future = self.send_goal_async(
+            goal,
+            feedback_callback=feedback_callback,
+            goal_uuid=goal_uuid,
+            timeout=goal_response_timeout,
+            **goal_fields,
         )
-
-        if response is None or not response.accepted:
-            with self._feedback_lock:
-                self._feedback_callbacks.pop(goal_id_key, None)
+        handle = future.result()
+        if handle is None or not handle.accepted:
             return None
-
-        return ROS2ActionClient.GoalHandle(goal_id_key, accepted=True, client=self)
+        return handle.get_result(timeout=result_timeout)
 
     def send_goal_async(
         self,
-        callback: Callable,
+        goal: Optional[object] = None,
+        *,
         feedback_callback: Optional[Callable] = None,
-        **kwargs,
-    ) -> None:
+        goal_uuid: Optional[object] = None,
+        timeout: object = _USE_CLIENT_TIMEOUT,
+        **goal_fields,
+    ) -> Future:
         """Send a goal to the action server asynchronously.
 
-        Returns immediately. Both ``callback`` and ``feedback_callback`` are
-        invoked from Zenoh background threads and must be thread-safe.
+        The returned Future resolves when the send_goal service response is
+        received. Its result is a GoalHandle for accepted or rejected goals, or
+        None on timeout, close, or transport/serialization error.
 
         Args:
-            callback: Called with the GetResult_Response object when the result
-                is ready, or with None when the goal was rejected or on error.
+            goal: Optional prebuilt rosbags Goal message. If omitted, ``goal_fields``
+                are forwarded to the Goal message constructor.
             feedback_callback: Optional callable invoked as
-                ``feedback_callback(feedback_msg)`` for each feedback message
-                published for this goal.
-            **kwargs: Goal field values forwarded to the Goal message constructor.
+                ``feedback_callback(feedback_message)`` with the full
+                FeedbackMessage object for this goal.
+            goal_uuid: Optional deterministic goal UUID as uuid.UUID, UUID message,
+                or 16 raw bytes.
+            timeout: Maximum wait for the send_goal service response. The default
+                uses the client request timeout. Pass None to wait indefinitely.
+            **goal_fields: Goal field values forwarded to the Goal message constructor.
         """
-        goal_id = uuid.uuid4().bytes
+        result_future: Future = Future()
+        goal_id = (
+            uuid.uuid4().bytes
+            if goal_uuid is None
+            else self._normalize_goal_id_bytes(goal_uuid)
+        )
         goal_id_key = bytes(goal_id)
 
         if feedback_callback is not None:
             with self._feedback_lock:
                 self._feedback_callbacks[goal_id_key] = feedback_callback
 
-        request = self._build_send_goal_request(goal_id, kwargs)
-        payload = self._serialize(request, self._send_goal_req_store)
+        try:
+            request = self._build_send_goal_request(goal_id, goal, goal_fields)
+            payload = self._serialize(request, self._send_goal_req_store)
+        except Exception:
+            self._remove_feedback_callback(goal_id_key)
+            raise
 
-        def _on_response(response):
-            if response is None or not response.accepted:
-                with self._feedback_lock:
-                    self._feedback_callbacks.pop(goal_id_key, None)
-                callback(None)
+        def _on_response(done: Future):
+            if result_future.done():
+                return
+            try:
+                response = done.result()
+            except Exception:
+                response = None
+            if response is None:
+                self._remove_feedback_callback(goal_id_key)
+                result_future.set_result(None)
+                return
+            handle = ROS2ActionClient.GoalHandle(
+                goal_id_key,
+                accepted=getattr(response, "accepted", False),
+                client=self,
+                stamp=getattr(response, "stamp", None),
+            )
+            if handle.accepted:
+                self._register_goal_handle(handle)
             else:
-                self._call_get_result_async(goal_id_key, callback)
+                self._remove_feedback_callback(goal_id_key)
+            result_future.set_result(handle)
 
-        self._run_query_async(
+        query_future = self._run_query_async(
             self._send_goal_querier,
             payload,
             self._send_goal_gid,
+            "send_goal",
             self._send_goal_resp_store,
-            callback=_on_response,
+            timeout=self._resolve_timeout(timeout),
         )
+        query_future.add_done_callback(_on_response)
+        return result_future
 
-    def _build_send_goal_request(self, goal_id: bytes, goal_kwargs: dict):
+    def _build_send_goal_request(
+        self,
+        goal_id: bytes,
+        goal: Optional[object],
+        goal_fields: dict,
+    ):
         """Construct a SendGoal_Request message from raw goal_id bytes and goal fields."""
+        if goal is not None and goal_fields:
+            raise TypeError(
+                "Pass either a prebuilt goal message or goal fields, not both"
+            )
         uuid_msg = self._make_uuid_msg(goal_id)
-        goal_msg = self._goal_class(**goal_kwargs)
+        goal_msg = goal if goal is not None else self._goal_class(**goal_fields)
+        if not isinstance(goal_msg, self._goal_class):
+            raise TypeError(
+                f"Expected goal type {self._goal_class!r}, got {type(goal_msg)!r}"
+            )
         return self._send_goal_req_class(goal_id=uuid_msg, goal=goal_msg)
 
     def _call_get_result(
@@ -778,41 +963,90 @@ class ROS2ActionClient:
         uuid_msg = self._make_uuid_msg(goal_id)
         request = self._get_result_req_class(goal_id=uuid_msg)
         payload = self._serialize(request, self._get_result_req_store)
-        return self._run_query(
+        response = self._run_query(
             self._get_result_querier,
             payload,
             self._get_result_gid,
+            "get_result",
             self._get_result_resp_store,
             timeout=timeout,
         )
+        if response is not None:
+            self._remove_goal_handle(goal_id)
+            self._remove_feedback_callback(goal_id)
+        return response
 
-    def _call_get_result_async(self, goal_id: bytes, callback: Callable) -> None:
-        """Build and send a GetResult_Request asynchronously; invoke callback with the response."""
+    def _call_get_result_async(
+        self,
+        goal_id: bytes,
+        timeout: Optional[float] = None,
+    ) -> Future:
+        """Build and send a GetResult_Request asynchronously."""
         uuid_msg = self._make_uuid_msg(goal_id)
         request = self._get_result_req_class(goal_id=uuid_msg)
         payload = self._serialize(request, self._get_result_req_store)
-        self._run_query_async(
+        future = self._run_query_async(
             self._get_result_querier,
             payload,
             self._get_result_gid,
+            "get_result",
             self._get_result_resp_store,
-            callback=callback,
+            timeout=timeout,
         )
+        goal_id_key = bytes(goal_id)
 
-    def _call_cancel_goal(self, goal_id: bytes) -> Optional[object]:
+        def _cleanup(done: Future) -> None:
+            try:
+                response = done.result()
+            except Exception:
+                return
+            if response is not None:
+                self._remove_goal_handle(goal_id_key)
+                self._remove_feedback_callback(goal_id_key)
+
+        future.add_done_callback(_cleanup)
+        return future
+
+    def _call_cancel_goal(
+        self,
+        goal_id: bytes,
+        timeout: object = _USE_CLIENT_TIMEOUT,
+    ) -> Optional[object]:
         """Build and send a CancelGoal_Request; block until the response arrives or timeout."""
+        future = self._call_cancel_goal_async(goal_id, timeout=timeout)
+        return future.result()
+
+    def _call_cancel_goal_async(
+        self,
+        goal_id: bytes,
+        timeout: object = _USE_CLIENT_TIMEOUT,
+    ) -> Future:
+        """Build and send a CancelGoal_Request asynchronously."""
         uuid_msg = self._make_uuid_msg(goal_id)
         stamp = self._time_class(sec=0, nanosec=0)
         goal_info = self._goal_info_class(goal_id=uuid_msg, stamp=stamp)
         request = self._cancel_goal_req_class(goal_info=goal_info)
         payload = self._serialize(request, self._cancel_goal_req_store)
-        return self._run_query(
+        future = self._run_query_async(
             self._cancel_goal_querier,
             payload,
             self._cancel_goal_gid,
+            "cancel_goal",
             self._cancel_goal_resp_store,
-            timeout=self.timeout,
+            timeout=self._resolve_timeout(timeout),
         )
+        goal_id_key = bytes(goal_id)
+
+        def _cleanup(done: Future) -> None:
+            try:
+                response = done.result()
+            except Exception:
+                return
+            if response is not None:
+                self._remove_feedback_callback(goal_id_key)
+
+        future.add_done_callback(_cleanup)
+        return future
 
     def _feedback_router(self, sample) -> None:
         """Deserialize a FeedbackMessage and dispatch to the registered callback."""
@@ -835,13 +1069,112 @@ class ROS2ActionClient:
             with self._feedback_lock:
                 cb = self._feedback_callbacks.get(goal_id_key)
             if cb is not None:
-                cb(msg.feedback)
+                cb(msg)
         except Exception as e:
             logger.error(f"Error in feedback router: {e}", exc_info=True)
 
     def _status_listener(self, sample) -> None:
-        """Receive GoalStatusArray updates (no-op by default; subclass to override)."""
-        pass
+        """Update active goal handles from GoalStatusArray messages."""
+        try:
+            payload = getattr(sample, "payload", None)
+            if payload is None or not hasattr(payload, "to_bytes"):
+                return
+            cdr_bytes = payload.to_bytes()
+            if not cdr_bytes:
+                return
+
+            msg = self._deserialize(cdr_bytes, self._status_msg_store)
+            status_list = getattr(msg, "status_list", None) or []
+            for goal_status in status_list:
+                goal_info = getattr(goal_status, "goal_info", None)
+                goal_id_key = self._goal_id_to_key(getattr(goal_info, "goal_id", None))
+                if goal_id_key is None:
+                    continue
+                status = getattr(goal_status, "status", None)
+                terminal = status in _TERMINAL_GOAL_STATUSES
+                with self._goal_lock:
+                    handle = self._goal_handles.get(goal_id_key)
+                    if handle is not None:
+                        handle.status = status
+                    if terminal:
+                        self._goal_handles.pop(goal_id_key, None)
+                if terminal:
+                    self._remove_feedback_callback(goal_id_key)
+        except Exception as e:
+            logger.error(f"Error in status listener: {e}", exc_info=True)
+
+    def _server_endpoint_available(
+        self,
+        kind: EntityKind,
+        name: str,
+        dds_type: str,
+        type_hash: str,
+        timeout: float,
+    ) -> bool:
+        """Check one expected action server endpoint in Zenoh liveliness."""
+        for parsed in _query_liveliness(
+            self.session_mgr,
+            self.domain_id,
+            kind.value,
+            timeout=timeout,
+        ):
+            if (
+                parsed.get("qualified_name") == name
+                and parsed.get("dds_type") == dds_type
+                and parsed.get("type_hash") == type_hash
+            ):
+                return True
+        return False
+
+    def server_is_ready(self, timeout: float = 0.1) -> bool:
+        """Return True when all ROS 2 action server endpoints are discoverable."""
+        endpoints = (
+            (
+                EntityKind.SERVICE,
+                f"{self.action_name}/_action/send_goal",
+                self._send_goal_dds,
+                self._send_goal_hash,
+            ),
+            (
+                EntityKind.SERVICE,
+                f"{self.action_name}/_action/get_result",
+                self._get_result_dds,
+                self._get_result_hash,
+            ),
+            (
+                EntityKind.SERVICE,
+                f"{self.action_name}/_action/cancel_goal",
+                self._cancel_goal_dds,
+                self._cancel_goal_hash,
+            ),
+            (
+                EntityKind.PUBLISHER,
+                f"{self.action_name}/_action/feedback",
+                self._feedback_dds,
+                self._feedback_hash,
+            ),
+            (
+                EntityKind.PUBLISHER,
+                f"{self.action_name}/_action/status",
+                self._status_dds,
+                self._status_hash,
+            ),
+        )
+        return all(
+            self._server_endpoint_available(kind, name, dds_type, type_hash, timeout)
+            for kind, name, dds_type, type_hash in endpoints
+        )
+
+    def wait_for_server(self, timeout_sec: Optional[float] = None) -> bool:
+        """Wait until an action server is discoverable, matching rclpy semantics."""
+        sleep_time = 0.25
+        deadline = None if timeout_sec is None else time.monotonic() + timeout_sec
+        while True:
+            if self.server_is_ready(timeout=min(sleep_time, 0.1)):
+                return True
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+            time.sleep(sleep_time)
 
     def close(self) -> None:
         """Undeclare all liveliness tokens, queriers, and subscribers.
@@ -855,6 +1188,18 @@ class ROS2ActionClient:
             if self._closed:
                 return
             self._closed = True
+
+        with self._pending_lock:
+            pending = list(self._pending_futures)
+            self._pending_futures.clear()
+        for future in pending:
+            if not future.done():
+                future.set_result(None)
+
+        with self._feedback_lock:
+            self._feedback_callbacks.clear()
+        with self._goal_lock:
+            self._goal_handles.clear()
 
         tokens = [
             "node_token",
