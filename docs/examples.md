@@ -15,7 +15,7 @@ python3 examples/01_publish_string.py
 python3 examples/02_subscribe_string.py
 ```
 
-For the full list (including services, queue-mode services, and compressed image subscription), see `examples/README.md`.
+For the full list (including services, queue-mode services, compressed image subscription, and the action client), see `examples/README.md`.
 
 ---
 

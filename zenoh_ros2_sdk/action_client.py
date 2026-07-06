@@ -810,7 +810,7 @@ class ROS2ActionClient:
         goal_uuid: Optional[object] = None,
         goal_response_timeout: object = _USE_CLIENT_TIMEOUT,
         result_timeout: Optional[float] = None,
-        **goal_fields,
+        **goal_fields: object,
     ) -> Optional[object]:
         """Send a goal and wait for the final action result.
 
@@ -864,7 +864,7 @@ class ROS2ActionClient:
         feedback_callback: Optional[Callable] = None,
         goal_uuid: Optional[object] = None,
         timeout: object = _USE_CLIENT_TIMEOUT,
-        **goal_fields,
+        **goal_fields: object,
     ) -> Future:
         """Send a goal to the action server asynchronously.
 
