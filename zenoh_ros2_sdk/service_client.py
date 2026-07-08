@@ -71,7 +71,11 @@ class ROS2ServiceClient:
         self.namespace = namespace
         self.node_name = node_name or f"zenoh_service_client_{uuid.uuid4().hex[:8]}"
         self.timeout = timeout
-        _, self.qos = self._normalize_qos(qos, default=DEFAULT_QOS_PROFILE, fallback=DEFAULT_QOS_PROFILE.encode())
+        _, self.qos = self._normalize_qos(
+            qos,
+            default=DEFAULT_QOS_PROFILE,
+            default_encoded=DEFAULT_QOS_PROFILE.encode(),
+        )
 
         # Get or create shared session
         self.session_mgr = ZenohSession.get_instance(router_ip, router_port)
@@ -153,7 +157,7 @@ class ROS2ServiceClient:
                                     f"Service definition file for {srv_type} has empty response definition"
                                 )
                 except Exception as e:
-                    # Re-raise with more context - don't silently swallow errors
+                    # Re-raise with service context.
                     raise RuntimeError(
                         f"Failed to load service definitions from registry for {srv_type}: {e}"
                     ) from e
@@ -165,7 +169,6 @@ class ROS2ServiceClient:
                 )
 
             # Get dependencies recursively
-            dependencies = None
             try:
                 registry = get_registry()
                 # Load dependencies for both request and response using shared utility function
@@ -173,7 +176,9 @@ class ROS2ServiceClient:
                 resp_deps = load_dependencies_recursive(self.response_type, hash_response_def, registry)
                 dependencies = {**req_deps, **resp_deps}
             except Exception as e:
-                logger.debug(f"Could not load dependencies for {srv_type}: {e}")
+                raise RuntimeError(
+                    f"Failed to load complete dependency tree for {srv_type}: {e}"
+                ) from e
 
             # For services, compute hash from the service type itself (not just request)
             # Services are represented as a type with request_message, response_message, and event_message fields
@@ -221,15 +226,15 @@ class ROS2ServiceClient:
         qos: Optional[object],
         *,
         default: QosProfile,
-        fallback: str,
+        default_encoded: str,
     ) -> tuple[QosProfile, str]:
         if qos is None:
-            return default, fallback
+            return default, default_encoded
         if isinstance(qos, QosProfile):
             return qos, qos.encode()
         if isinstance(qos, str):
             return QosProfile.decode(qos), qos
-        return default, fallback
+        return default, default_encoded
 
     def _declare_liveliness_tokens(self):
         """Declare liveliness tokens for ROS2 discovery"""

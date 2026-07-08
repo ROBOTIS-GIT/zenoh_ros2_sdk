@@ -1,5 +1,5 @@
 """
-Attachment utilities compatible with rmw_zenoh / ros-z.
+Attachment utilities compatible with rmw_zenoh.
 
 Binary format (little-endian), matching our existing implementation:
   u64 sequence_number
@@ -59,4 +59,3 @@ class Attachment:
             raise ValueError("attachment truncated (gid_len exceeds available bytes)")
         gid = b[17 : 17 + gid_len]
         return Attachment(sequence_id=seq, timestamp_ns=ts, gid=gid)
-

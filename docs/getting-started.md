@@ -1,6 +1,6 @@
 # Getting Started
 
-This page is about using the **SDK** (pub/sub/services). If you want to build the documentation site itself, see `contributing/docs.md`.
+This page is about using the **SDK** (pub/sub/services/action clients). If you want to build the documentation site itself, see `contributing/docs.md`.
 
 ## Install
 
@@ -24,7 +24,7 @@ Many setups use a local router. Execute the Zenoh router in a ROS2 environment:
 ros2 run rmw_zenoh_cpp rmw_zenohd
 ```
 
-If you are connecting to a remote router, pass `router_ip` / `router_port` when creating publishers/subscribers/service endpoints.
+If you are connecting to a remote router, pass `router_ip` / `router_port` when creating publishers, subscribers, service endpoints, or action clients.
 
 ## List topics and topic info
 
@@ -112,9 +112,40 @@ if resp:
 client.close()
 ```
 
+## Action client
+
+`ROS2ActionClient` connects to an existing ROS 2 action server. Action server
+support is not implemented in the SDK yet.
+
+Start a ROS 2 action server, for example:
+
+```bash
+ros2 run action_tutorials_py fibonacci_action_server
+```
+
+Then send a goal from Python:
+
+```python
+from zenoh_ros2_sdk import ROS2ActionClient
+
+client = ROS2ActionClient(
+    action_name="/fibonacci",
+    action_type="example_interfaces/action/Fibonacci"
+)
+
+result = client.send_goal(
+    order=5,
+    feedback_callback=lambda msg: print(msg.feedback.sequence),
+    result_timeout=30.0,
+)
+
+if result:
+    print(result.result.sequence)
+client.close()
+```
+
 ## Next steps
 
-- For runnable scripts (including discovery and compressed image subscription), see `examples.md`.
+- For runnable scripts (including discovery, compressed image subscription, and action clients), see `examples.md`.
 - For topic list / topic info (CLI and API), see `TOPIC_LIST_AND_INFO.md`.
 - For how discovery/QoS/key-expressions work, see `concepts.md`.
-

@@ -2,7 +2,7 @@
 
 **Python SDK for ROS 2 communication via Zenoh — use ROS 2 without a ROS 2 environment.**
 
-This SDK lets pure-Python apps publish/subscribe to ROS 2 topics and offer/call ROS 2 services over Zenoh in a way that is compatible with `rmw_zenoh` discovery (topics/services show up in ROS tools).
+This SDK lets pure-Python apps publish/subscribe to ROS 2 topics, offer/call ROS 2 services, and use ROS 2 action servers over Zenoh in a way that is compatible with `rmw_zenoh` discovery.
 
 ## Quick start
 
@@ -39,9 +39,8 @@ sub = ROS2Subscriber(
 
 ## Where to go next
 
-- **Getting Started**: installation, running a router, pub/sub and services (`getting-started.md`)
+- **Getting Started**: installation, running a router, pub/sub, services, and action clients (`getting-started.md`)
 - **Topic list / topic info**: `zenoh-ros2` CLI and discovery API (`TOPIC_LIST_AND_INFO.md`)
 - **Concepts**: domain IDs, discovery tokens, key expressions, QoS (`concepts.md`)
 - **Examples**: runnable scripts you can copy/paste (`examples.md`)
 - **API Reference**: full API from docstrings (`api/index.md`)
-

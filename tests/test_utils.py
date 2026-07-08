@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 from zenoh_ros2_sdk.utils import (
     ros2_to_dds_type, get_type_hash, mangle_name, compute_type_hash_from_msg,
-    compute_service_type_hash, resolve_domain_id, dds_to_ros_type, demangle_name
+    compute_service_type_hash, resolve_domain_id, dds_to_ros_type, demangle_name,
+    load_dependencies_recursive,
 )
-from zenoh_ros2_sdk.message_registry import get_registry
+from zenoh_ros2_sdk.message_registry import MessageRegistry, get_registry
 
 
 class TestRos2ToDdsType:
@@ -108,7 +109,7 @@ class TestGetTypeHash:
                 if msg_path.exists():
                     return msg_path
 
-        # Try message registry as fallback
+        # Then try the message registry.
         try:
             registry = get_registry()
             msg_file = registry.get_msg_file_path(msg_type)
@@ -133,6 +134,33 @@ class TestGetTypeHash:
 
         computed_hash = compute_type_hash_from_msg("std_msgs/msg/String", msg_def)
         assert computed_hash == expected_hash, f"Hash mismatch! Expected: {expected_hash}, Computed: {computed_hash}"
+
+    def test_load_dependencies_recursive_requires_missing_dependency(self, tmp_path):
+        """Nested definitions must be complete for ROS 2-compatible type hashes."""
+        registry = MessageRegistry(messages_dir=str(tmp_path))
+
+        with pytest.raises(FileNotFoundError, match="test_msgs/msg/Child"):
+            load_dependencies_recursive(
+                "test_msgs/msg/Parent",
+                "Child child\n",
+                registry,
+            )
+
+    def test_load_dependencies_recursive_loads_nested_dependency(self, tmp_path):
+        """Dependency loading returns the full nested definition tree."""
+        child_dir = tmp_path / "test_msgs" / "msg"
+        child_dir.mkdir(parents=True)
+        child_msg = child_dir / "Child.msg"
+        child_msg.write_text("int32 data\n")
+
+        registry = MessageRegistry(messages_dir=str(tmp_path))
+        deps = load_dependencies_recursive(
+            "test_msgs/msg/Parent",
+            "Child child\n",
+            registry,
+        )
+
+        assert deps == {"test_msgs/msg/Child": "int32 data\n"}
 
     def test_twist_hash_validation(self):
         """Test geometry_msgs/msg/Twist type hash validation with dependencies"""
