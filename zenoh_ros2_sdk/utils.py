@@ -294,12 +294,21 @@ def _parse_msg_definition(msg_def: str) -> List[Dict]:
         # This format is used in sensor_msgs/Imu.msg for covariance arrays
         if not match_bs:
             match = re.search(r'^(\w+)\[(\d+)\]$', field_type)
+            # AI Generated
+            match_bounded_seq = re.search(r'^(\w+)\[<=(\d+)\]$', field_type)
+            # AI Generated
             if match:
                 # Fixed-size array in type: "float64[9]" -> type="float64", size=9
                 field_type = match.group(1)
                 array_size = int(match.group(2))
                 is_array = True
                 is_bounded = False
+            elif match_bounded_seq:
+                # Bounded sequence in type: "float64[<=3]" -> type="float64", size=3, bounded=True
+                field_type = match_bounded_seq.group(1)
+                array_size = int(match_bounded_seq.group(2))
+                is_array = True
+                is_bounded = True
             elif field_type.endswith('[]'):
                 # Unbounded sequence: string[] -> UNBOUNDED_SEQUENCE
                 is_array = True
