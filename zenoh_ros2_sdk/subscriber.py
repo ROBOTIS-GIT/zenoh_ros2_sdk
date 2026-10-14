@@ -5,7 +5,13 @@ import uuid
 from typing import Optional, Callable
 
 from .session import ZenohSession
-from .utils import ros2_to_dds_type, get_type_hash, load_dependencies_recursive, resolve_domain_id
+from .utils import (
+    ros2_to_dds_type,
+    get_type_hash,
+    load_dependencies_recursive,
+    resolve_domain_id,
+    mangle_name,
+)
 from .entity import EntityKind, NodeEntity, EndpointEntity
 from .keyexpr import topic_keyexpr, node_liveliness_keyexpr, endpoint_liveliness_keyexpr
 from .qos import QosProfile, QosDurability, DEFAULT_QOS_PROFILE
@@ -263,9 +269,12 @@ class ROS2Subscriber:
 
         # rmw_zenoh liveliness token format:
         # @ros2_lv/<domain>/<zenoh_id>/<seq>/<entity_id>/MP/<gid_hi>/<gid_lo>/<node>/%<topic>/<dds_type>/<type_hash>/<qos>
+        # Topic must be mangled the same way as endpoint_liveliness_keyexpr does (all "/" -> "%"),
+        # otherwise multi-segment topics (e.g. "/mode/state") split into extra keyexpr levels
+        # and never match the publisher's token.
         lv_pattern = (
             f"@ros2_lv/{self.domain_id}/*/*/*/MP/*/*/*"
-            f"/%{self.topic.lstrip('/')}/{self.dds_type_name}/{self.type_hash}/*"
+            f"/{mangle_name(self.topic)}/{self.dds_type_name}/{self.type_hash}/*"
         )
 
         try:
