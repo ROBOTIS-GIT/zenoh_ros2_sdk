@@ -1,7 +1,7 @@
 """
 Topic discovery via Zenoh liveliness (ros2 topic list / ros2 topic info -v).
 
-Uses the same @ros2_lv/... token format as rmw_zenoh_cpp / ros-z. Queries
+Uses the same @ros2_lv/... token format as rmw_zenoh_cpp. Queries
 liveliness for MP (publisher) and MS (subscriber) tokens to list topics and
 optionally show verbose endpoint info.
 """
@@ -361,4 +361,3 @@ def get_service_info(
         servers=servers,
         clients=clients,
     )
-

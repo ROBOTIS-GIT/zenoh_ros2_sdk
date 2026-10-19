@@ -159,6 +159,18 @@ MESSAGE_REPOSITORIES: Dict[str, MessageRepository] = {
             "interfaces",
         ],
     ),
+    # unique_identifier_msgs (contains UUID message used by ROS2 actions)
+    # Reference: https://github.com/ros2/unique_identifier_msgs
+    "unique_identifier_msgs": MessageRepository(
+        url="https://github.com/ros2/unique_identifier_msgs.git",
+        commit="jazzy",
+        cache_path="unique_identifier_msgs",
+        msg_path="",
+        packages=[
+            "unique_identifier_msgs",
+        ],
+        flat_layout=True,
+    ),
 }
 
 # Mapping from message package namespace to repository name

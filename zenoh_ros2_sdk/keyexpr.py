@@ -1,5 +1,5 @@
 """
-Key expression builders aligned with rmw_zenoh_cpp design.md and ros-z implementation.
+Key expression builders aligned with rmw_zenoh_cpp design.md.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ ADMIN_SPACE = "@ros2_lv"
 
 def topic_keyexpr(domain_id: int, fully_qualified_name: str, dds_type_name: str, type_hash: str) -> str:
     """
-    Data-plane key expression for topics/services.
+    Data-plane key expression for topics, services, and action endpoints.
 
     Format:
       <domain_id>/<fully_qualified_name>/<type_name>/<type_hash>
@@ -40,7 +40,7 @@ def node_liveliness_keyexpr(node: NodeEntity) -> str:
 
 def endpoint_liveliness_keyexpr(ep: EndpointEntity) -> str:
     """
-    Liveliness token for a publisher/subscriber/service/client.
+    Liveliness token for an rmw_zenoh endpoint.
 
     Format:
       @ros2_lv/<domain_id>/<session_id>/<node_id>/<entity_id>/<kind>/<enclave>/<namespace>/<node_name>/
@@ -57,4 +57,3 @@ def endpoint_liveliness_keyexpr(ep: EndpointEntity) -> str:
         f"{enclave}/{namespace}/{node_name}/"
         f"{qualified_name}/{ep.dds_type_name}/{ep.type_hash}/{ep.qos}"
     )
-

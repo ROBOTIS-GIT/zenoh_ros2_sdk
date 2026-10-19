@@ -1,12 +1,12 @@
 """
-QoS model and encoding compatible with rmw_zenoh_cpp / ros-z.
+QoS model and encoding compatible with rmw_zenoh_cpp.
 
 rmw_zenoh encodes QoS into liveliness tokens as a compact string:
 
   <ReliabilityKind>:<DurabilityKind>:<HistoryKind>,<HistoryDepth>:
   <DeadlineSec,DeadlineNSec>:<LifespanSec,LifespanNSec>:<LivelinessKind,LivelinessSec,LivelinessNSec>
 
-Empty fields mean "use default" (as in rmw_zenoh / ros-z).
+Empty fields mean "use default" as in rmw_zenoh.
 """
 
 from __future__ import annotations
@@ -44,18 +44,18 @@ class Duration:
     nsec: int
 
 
-# Matches ros-z infinite duration (kept as a module-level constant; do not attach to frozen dataclass)
+# Matches rmw_zenoh infinite duration (kept as a module-level constant; do not attach to frozen dataclass)
 DURATION_INFINITE = Duration(sec=9223372036, nsec=854775807)
 
 
 @slotted_dataclass(frozen=True)
 class QosProfile:
-    """QoS profile compatible with rmw_zenoh / ros-z QoS token encoding.
+    """QoS profile compatible with rmw_zenoh QoS token encoding.
 
     Notes:
         - This SDK primarily uses QoS to populate `@ros2_lv/.../<qos>` liveliness tokens.
         - Some QoS fields may not have a runtime effect unless the underlying Zenoh API supports it.
-        - `encode()`/`decode()` implement the same compact format used by `rmw_zenoh_cpp` and `ros-z`.
+        - `encode()`/`decode()` implement the same compact format used by `rmw_zenoh_cpp`.
     """
     reliability: QosReliability = QosReliability.RELIABLE
     durability: QosDurability = QosDurability.VOLATILE
@@ -68,7 +68,7 @@ class QosProfile:
 
     def encode(self, *, default: Optional["QosProfile"] = None) -> str:
         """
-        Encode into the rmw_zenoh QoS token format (compatible with ros-z).
+        Encode into the rmw_zenoh QoS token format.
 
         If `default` is provided, fields equal to `default` are elided (empty).
         """
@@ -188,3 +188,13 @@ class QosProfile:
 
 DEFAULT_QOS_PROFILE = QosProfile()
 
+# Matches rcl_action default feedback subscription QoS:
+# reliable, volatile, keep last depth 10.
+DEFAULT_ACTION_FEEDBACK_QOS_PROFILE = QosProfile()
+
+# Matches rcl_action_qos_profile_status_default:
+# reliable, transient local, keep last depth 1.
+DEFAULT_ACTION_STATUS_QOS_PROFILE = QosProfile(
+    durability=QosDurability.TRANSIENT_LOCAL,
+    history_depth=1,
+)

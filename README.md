@@ -2,7 +2,7 @@
 
 **Python SDK for ROS 2 communication via Zenoh - Use ROS 2 without ROS 2 environment**
 
-Enable ROS 2 topic publishing and subscribing in pure Python applications. Publishers and subscribers automatically appear in `ros2 topic list` and work seamlessly with existing ROS 2 nodes using rmw_zenoh.
+Enable ROS 2 topic, service, and action-client communication in pure Python applications. Publishers, subscribers, service endpoints, and action clients use rmw_zenoh-compatible discovery so they can work with existing ROS 2 nodes over Zenoh.
 
 ## Documentation
 
@@ -15,10 +15,11 @@ Enable ROS 2 topic publishing and subscribing in pure Python applications. Publi
 - ✅ **Appears in `ros2 topic list`** - Uses liveliness tokens for ROS 2 discovery
 - ✅ **Automatic resource management** - GIDs, node IDs, entity IDs handled automatically
 - ✅ **Session pooling** - Multiple publishers/subscribers share the same Zenoh session
-- ✅ **Automatic message/service loading** - Automatically downloads message and service definitions from Git repositories
-- ✅ **Type hash computation** - Computes ROS2-compatible type hashes from message/service definitions
-- ✅ **Type registration** - Automatic message and service type registration
+- ✅ **Automatic message/service/action loading** - Automatically downloads interface definitions from Git repositories
+- ✅ **Type hash computation** - Computes ROS2-compatible type hashes from message, service, and action definitions
+- ✅ **Type registration** - Automatic message, service, and action type registration
 - ✅ **Service support** - Create service clients and servers with automatic type loading
+- ✅ **Action client support** - Send goals, receive feedback, get results, and cancel goals against ROS 2 action servers
 - ✅ **Clean API** - Simple, intuitive interface
 
 ## Quick Start
@@ -139,6 +140,31 @@ client.call_async(callback, a=10, b=20)
 client.close()
 ```
 
+### Simple Action Client
+
+`ROS2ActionClient` talks to an existing ROS 2 action server. The SDK does not
+currently provide an action server implementation.
+
+```python
+from zenoh_ros2_sdk import ROS2ActionClient
+
+client = ROS2ActionClient(
+    action_name="/fibonacci",
+    action_type="example_interfaces/action/Fibonacci"
+)
+
+result = client.send_goal(
+    order=5,
+    feedback_callback=lambda msg: print("Feedback:", msg.feedback.sequence),
+    result_timeout=30.0,
+)
+
+if result:
+    print("Result:", result.result.sequence)
+
+client.close()
+```
+
 ## Architecture
 
 ### Key Components
@@ -170,6 +196,12 @@ client.close()
    - Receives requests via Zenoh queryable
    - Calls user callback with request
    - Sends response back to client
+
+6. **ROS2ActionClient**
+   - Creates rmw_zenoh-compatible action client endpoints
+   - Sends goals to ROS 2 action servers
+   - Receives feedback and status messages
+   - Supports result polling and goal cancellation
 
 ### Resource Management
 
@@ -265,8 +297,10 @@ export ROS_DOMAIN_ID=30
 - Python 3.8+
 - `eclipse-zenoh` Python package (>=0.10.0)
 - `rosbags` Python package (>=0.11.0, for message serialization)
+- `numpy` Python package (>=1.23.0, for ROS UUID array handling)
 - `GitPython` Python package (>=3.1.18, for automatic message downloading from git repositories)
 - `tqdm` Python package (>=4.64.0, for download progress indicators)
+- `json5` Python package (>=0.9.0, for Zenoh configuration overrides)
 
 ### Optional Dependencies
 
@@ -307,7 +341,8 @@ pip install -e .
 ## Future Improvements
 
 - [ ] Support for more message types out of the box
-- [ ] Action support
+- [x] Action client support
+- [ ] Action server support
 - [ ] Better error handling and retry logic
 - [ ] Connection pooling and reconnection
 - [ ] QoS configuration options

@@ -35,6 +35,12 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Concepts: concepts.md
+  - CLI and Discovery:
+      - Topic List and Info: TOPIC_LIST_AND_INFO.md
+      - ROS 2 CLI Comparison: ROS2CLI_COMPARISON.md
+      - ROS 2 CLI Daemon Logic: ROS2CLI_DAEMON_LOGIC.md
+      - Discovery Close Delay: DISCOVERY_CLOSE_DELAY.md
+      - Zenoh Close Panic: ZENOH_CLOSE_PANIC.md
   - Examples: examples.md
   - API Reference:
       - Overview: api/index.md
@@ -48,6 +54,7 @@ nav:
           - subscriber: api/subscriber.md
           - service_client: api/service_client.md
           - service_server: api/service_server.md
+          - action_client: api/action_client.md
           - session: api/session.md
           - message_registry: api/message_registry.md
   - Contributing:

@@ -92,7 +92,7 @@ python3 examples/09_subscribe_compressed_image.py
 Note: this example uses a ZED topic and a non-local `router_ip` by default. Edit the script to match your setup.
 
 ### [`10_service_server_queue.py`](10_service_server_queue.py)
-Demonstrates a service server in queue mode (ros-z style): `take_request()` / `send_response()` with a correlation key.
+Demonstrates a service server in queue mode: `take_request()` / `send_response()` with a correlation key.
 
 **Usage:**
 ```bash
@@ -181,6 +181,22 @@ python3 examples/20_subscribe_battery_state.py                   # subscribe to 
 python3 examples/20_subscribe_battery_state.py /my/battery/topic
 ```
 
+### [`21_action_client.py`](21_action_client.py)
+Demonstrates the full ROS2 action client workflow using `ROS2ActionClient`:
+- Sending a goal synchronously and waiting for the final result with a per-goal feedback callback.
+- Sending a goal asynchronously via `send_goal_async`.
+- Cancelling an in-progress goal with `GoalHandle.cancel_goal()`.
+
+Uses the standard `example_interfaces/action/Fibonacci` action. Start the matching server first:
+```bash
+ros2 run action_tutorials_py fibonacci_action_server
+```
+
+**Usage:**
+```bash
+python3 examples/21_action_client.py
+```
+
 ## Running Examples
 
 Make sure you have:
@@ -195,7 +211,7 @@ Each example is self-contained and uses the message registry to automatically lo
 
 ## Debugging Pub/Sub Discovery (rmw_zenoh compatibility)
 
-This SDK matches `rmw_zenoh_cpp`/`ros-z` conventions by using:
+This SDK matches `rmw_zenoh_cpp` conventions by using:
 
 - **Data-plane key expressions** (payload transport):
   - `<domain_id>/<fully_qualified_name>/<dds_type_name>/<type_hash>`
@@ -211,9 +227,9 @@ Entity kinds:
 
 If ROS tools can see a topic but you receive no data, confirm there is an `MS` token for that topic. Some publishers (notably camera/image pipelines) only start producing data after they discover at least one subscriber.
 
-## QoS (rmw_zenoh / ros-z format)
+## QoS (rmw_zenoh format)
 
-This SDK uses the same compact QoS encoding as `rmw_zenoh_cpp` / `ros-z` for liveliness tokens:
+This SDK uses the same compact QoS encoding as `rmw_zenoh_cpp` for liveliness tokens:
 
 `<Reliability>:<Durability>:<HistoryKind,HistoryDepth>:<DeadlineSec,DeadlineNSec>:<LifespanSec,LifespanNSec>:<LivelinessKind,LivelinessSec,LivelinessNSec>`
 

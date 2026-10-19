@@ -52,7 +52,7 @@ So: **first run** spawns the daemon but uses DirectNode for that run. **Subseque
 3. **(Unix only)** Mark all FDs except 0,1,2 and the server socket as non-inheritable so daemonize doesn’t hang (see comment and issue #851).
 4. **Start daemon process with socket handoff**  
    `daemonize(functools.partial(daemon.serve_and_close, server), tags={...}, timeout=timeout, debug=debug)`.
-5. **`daemonize`** ([daemon/daemonize.py](deps/ros2cli/ros2cli/ros2cli/daemon/daemonize.py)):  
+5. **`daemonize`** ([daemon/daemonize.py](https://github.com/ros2/ros2cli/blob/rolling/ros2cli/ros2cli/daemon/daemonize.py)):
    - Spawns subprocess: `python -c 'from ros2cli.daemon.daemonize import main; main()'` with `--name ros2-daemon`, `--ros-domain-id`, `--rmw-implementation`.  
    - Child’s stdin is a pipe. Parent **pickles** the callable `serve_and_close(server)` with **`PicklerForProcess`**, which can serialize the **socket** (by fileno on Unix, or `socket.share()` on Windows) and sends it over stdin.  
    - Child **unpickles** the callable (which now holds the same server/socket), closes stdin, then runs `callable_()` → **`serve_and_close(server)`** in the daemon process.  
@@ -69,14 +69,14 @@ So: **first run** spawns the daemon but uses DirectNode for that run. **Subseque
 - **`serve_and_close(server, timeout=2*60*60)`**  
   Calls **`serve(server, timeout=timeout)`**, then `server.server_close()` in `finally`.
 - **`serve(server, timeout=...)`**
-  1. Creates **one long-lived node**: `with NetworkAwareNode(node_args) as node:` — this is a **DirectNode** (rclpy node) that may be recreated if network interfaces change ([node/network_aware.py](deps/ros2cli/ros2cli/ros2cli/node/network_aware.py)).
+  1. Creates **one long-lived node**: `with NetworkAwareNode(node_args) as node:` — this is a **DirectNode** (rclpy node) that may be recreated if network interfaces change ([node/network_aware.py](https://github.com/ros2/ros2cli/blob/rolling/ros2cli/ros2cli/node/network_aware.py)).
   2. **Registers RPC methods** with the XML-RPC server: each method is a **bound method** of that node, e.g.  
      `node.get_topic_names_and_types`,  
      `node.get_service_names_and_types`,  
      `node.count_publishers`,  
      `node.count_subscribers`,  
      … (see the `functions` list in `serve()`).  
-     So when the CLI calls `proxy.get_topic_names_and_types(...)`, the daemon runs `node.get_topic_names_and_types(...)` and returns the result (serialized via XML-RPC; rclpy types are marshalled, see [xmlrpc/marshal/](deps/ros2cli/ros2cli/ros2cli/xmlrpc/marshal/)).
+     So when the CLI calls `proxy.get_topic_names_and_types(...)`, the daemon runs `node.get_topic_names_and_types(...)` and returns the result (serialized via XML-RPC; rclpy types are marshalled, see [xmlrpc/marshal/](https://github.com/ros2/ros2cli/tree/rolling/ros2cli/ros2cli/xmlrpc/marshal)).
   3. Registers **`system.shutdown`** to set a shutdown flag.
   4. **Loop:** `while rclpy.ok() and not shutdown: server.handle_request()` with **`server.timeout = 0.2`** so the daemon can react to signals and an inactivity timeout. If no RPC for `timeout` seconds, the daemon exits.
 

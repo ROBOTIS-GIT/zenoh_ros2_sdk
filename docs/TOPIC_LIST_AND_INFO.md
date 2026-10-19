@@ -11,7 +11,7 @@ This document describes the **zenoh-ros2-sdk** implementation of `ros2 topic lis
 - **List topics and get topic info** via the `zenoh-ros2` CLI or the Python discovery API.
 - Have your publishers/subscribers **discoverable** by standard ROS 2 tools (e.g. `ros2 topic list`) when those tools run with **rmw_zenoh** and the same Zenoh router.
 
-The SDK talks to a Zenoh router (e.g. `rmw_zenohd`). Discovery uses **liveliness tokens** under the admin space `@ros2_lv/...`, following the same format as **rmw_zenoh_cpp** and **ros-z** (ZettaScale). So any endpoint that declares these tokens (this SDK, ros-z nodes, or ROS 2 nodes via rmw_zenoh) appears in the same “ROS graph” over Zenoh.
+The SDK talks to a Zenoh router (e.g. `rmw_zenohd`). Discovery uses **liveliness tokens** under the admin space `@ros2_lv/...`, following the same format as **rmw_zenoh_cpp**. So any endpoint that declares these tokens (this SDK, Hiroz nodes, or ROS 2 nodes via rmw_zenoh) appears in the same "ROS graph" over Zenoh.
 
 ## Implemented behavior (topics)
 
@@ -63,7 +63,7 @@ As with topics, the SDK normalizes names to start with `/` and filters livelines
 ## Reference repos
 
 - **ros2cli**: https://github.com/ros2/ros2cli — reference for `ros2 topic list` / `ros2 topic info` and `ros2 service list` / `ros2 service type` behavior and output format.
-- **ros-z**: https://github.com/ZettaScaleLabs/ros-z — parent / reference for rmw_zenoh and liveliness conventions used by this SDK.
+- **Hiroz**: https://github.com/ZettaScaleLabs/hiroz — ZettaScale's Zenoh-native ROS 2 stack. Useful as a related implementation, while this SDK primarily targets official `rmw_zenoh` compatibility.
 
 ## Files
 

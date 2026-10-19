@@ -7,7 +7,8 @@ from .publisher import ROS2Publisher
 from .subscriber import ROS2Subscriber
 from .service_client import ROS2ServiceClient
 from .service_server import ROS2ServiceServer
-from .message_registry import MessageRegistry, load_message_type, get_message_class, get_registry, load_service_type
+from .action_client import ROS2ActionClient
+from .message_registry import MessageRegistry, load_message_type, get_message_class, get_registry, load_service_type, load_action_type
 from .discovery import (
     get_topic_names_and_types,
     get_topic_info,
@@ -27,9 +28,11 @@ __all__ = [
     "ROS2Subscriber",
     "ROS2ServiceClient",
     "ROS2ServiceServer",
+    "ROS2ActionClient",
     "MessageRegistry",
     "load_message_type",
     "load_service_type",
+    "load_action_type",
     "get_message_class",
     "get_registry",
     "get_topic_names_and_types",

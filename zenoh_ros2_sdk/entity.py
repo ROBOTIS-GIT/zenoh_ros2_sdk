@@ -1,5 +1,5 @@
 """
-Entity models aligned with rmw_zenoh_cpp / ros-z concepts.
+Entity models aligned with rmw_zenoh_cpp concepts.
 
 This module intentionally keeps *formatting* and *keyexpr construction* out of the
 publisher/subscriber implementations so that:
@@ -16,7 +16,7 @@ from .utils import slotted_dataclass
 
 
 class EntityKind(str, Enum):
-    """Matches rmw_zenoh_cpp / ros-z entity kind strings."""
+    """Matches rmw_zenoh_cpp entity kind strings."""
 
     NODE = "NN"
     PUBLISHER = "MP"
@@ -52,4 +52,3 @@ class EndpointEntity:
     type_hash: str
     qos: str
     gid: Optional[bytes] = None
-
