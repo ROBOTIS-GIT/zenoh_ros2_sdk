@@ -65,7 +65,7 @@ zenoh-ros2 = "zenoh_ros2_sdk.cli:main"
 exclude = ["tests*", "examples*"]
 
 [tool.setuptools.package-data]
-zenoh_ros2_sdk = ["config/*.json5"]
+zenoh_ros2_sdk = ["config/*.json5", "bundled_messages/*/msg/*.msg", "bundled_messages/*/package.xml", "bundled_messages/*/LICENSE*", "bundled_messages/README.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

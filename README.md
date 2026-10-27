@@ -311,3 +311,22 @@ pip install -e .
 - [ ] Better error handling and retry logic
 - [ ] Connection pooling and reconnection
 - [ ] QoS configuration options
+
+### Offline IMU and joint-state types
+
+The SDK packages `sensor_msgs/msg/Imu`, `sensor_msgs/msg/JointState`, and their
+payload dependencies. `ROS2Subscriber` loads these through the default registry
+without downloading message repositories. Explicit local definitions still take
+precedence. Other message types continue to use the configured Git sources.
+
+For gateways that maintain their own serialization catalog:
+
+```python
+from zenoh_ros2_sdk import get_bundled_message_definitions
+from zenoh_ros2_sdk.utils import get_type_hash
+
+definitions = get_bundled_message_definitions()  # Local reads, no session/network
+name = 'sensor_msgs/msg/Imu'
+type_hash = get_type_hash(name, definitions[name],
+                         {key: value for key, value in definitions.items() if key != name})
+```
