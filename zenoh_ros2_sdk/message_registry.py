@@ -13,7 +13,6 @@ from ._cache import (
     get_message_file_path,
 )
 from .logger import get_logger
-from .bundled import get_bundled_message_path
 
 logger = get_logger("message_registry")
 
@@ -67,11 +66,6 @@ class MessageRegistry:
         msg_file = self.messages_dir / namespace / msg / f"{message_name}.msg"
         if msg_file.exists():
             return msg_file
-
-        # Packaged standard telemetry types work without Git or a ROS install.
-        bundled_path = get_bundled_message_path(msg_type)
-        if bundled_path is not None:
-            return bundled_path
 
         # If not found locally, try to download from git repository
         try:

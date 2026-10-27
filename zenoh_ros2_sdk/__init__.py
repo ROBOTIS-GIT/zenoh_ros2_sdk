@@ -2,7 +2,6 @@
 Zenoh ROS2 SDK - Easy-to-use SDK for ROS2 communication without ROS2 environment
 """
 
-from .bundled import get_bundled_message_definitions
 from .session import ZenohSession
 from .publisher import ROS2Publisher
 from .subscriber import ROS2Subscriber
@@ -23,7 +22,6 @@ from .logger import get_logger
 
 __version__ = "0.1.8"
 __all__ = [
-    "get_bundled_message_definitions",
     "ZenohSession",
     "ROS2Publisher",
     "ROS2Subscriber",
