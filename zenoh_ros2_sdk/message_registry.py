@@ -2,8 +2,9 @@
 Message Registry - Loads and manages ROS2 message definitions from .msg files
 """
 import os
+import re
 from pathlib import Path
-from typing import Any, Optional, Set, Type
+from typing import Any, Dict, Optional, Set, Type
 
 from ._cache import (
     get_repository_for_package,
@@ -90,6 +91,42 @@ class MessageRegistry:
             )
 
         return None
+
+    def get_message_definitions(self, msg_type: str) -> Dict[str, str]:
+        """Resolve a message and its transitive definitions without a session.
+
+        Uses the same local-override -> configured Git repository/cache lookup as
+        get_msg_file_path. This lets external codecs consume SDK-resolved schemas
+        without opening Zenoh or registering classes in the shared session.
+        First use can download the configured repositories. Missing dependencies
+        fail explicitly rather than returning an incomplete schema graph.
+
+        Returns a dependency-first mapping of package/msg/Type to .msg text,
+        including msg_type itself. Pass this mapping to utils.get_type_hash as
+        the dependencies argument when computing a type's ROS-compatible hash.
+        """
+        definitions: Dict[str, str] = {}
+        visiting: Set[str] = set()
+
+        def resolve(name: str) -> None:
+            if not re.fullmatch(r"[A-Za-z_]\w*/msg/[A-Za-z_]\w*", name):
+                raise ValueError(f"Expected package/msg/Type: {name}")
+            if name in definitions:
+                return
+            if name in visiting:
+                raise ValueError(f"Cyclic message dependency: {name}")
+            path = self.get_msg_file_path(name)
+            if path is None:
+                raise FileNotFoundError(f"Message definition unavailable: {name}")
+            definition = path.read_text()
+            visiting.add(name)
+            for dependency in self._extract_dependencies(definition, name):
+                resolve(dependency)
+            visiting.remove(name)
+            definitions[name] = definition
+
+        resolve(msg_type)
+        return definitions
 
     def get_srv_file_path(self, srv_type: str, is_request: bool = True) -> Optional[Path]:
         """
